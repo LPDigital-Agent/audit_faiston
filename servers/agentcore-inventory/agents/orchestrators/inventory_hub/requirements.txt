@@ -1,0 +1,15 @@
+# =============================================================================
+# Inventory Hub Dependencies
+# =============================================================================
+# Note: Most dependencies are inherited from the parent agentcore-inventory
+# package. This file lists only agent-specific dependencies if any.
+#
+# The following are already in the parent requirements.txt:
+# - boto3 (S3 operations)
+# - strands (Agent framework)
+# - bedrock-agentcore-runtime (AgentCore Runtime)
+# - google-generativeai (Gemini provider)
+# =============================================================================
+
+# No additional dependencies required for Phase 1
+# All dependencies are inherited from parent package

@@ -1,0 +1,62 @@
+# =============================================================================
+# AgentCore Deployment Configuration - Inventory Hub
+# =============================================================================
+# Phase 1: Secure File Ingestion Layer
+#
+# Deploy command:
+#   cd server/agentcore-inventory/agents/orchestrators/inventory_hub
+#   agentcore deploy --profile faiston-aio
+#
+# Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/api-reference/cli.html
+# =============================================================================
+
+# Runtime configuration
+runtime:
+  id: faiston_sga_inventory_hub
+  description: "Inventory Hub - Secure File Ingestion (Phase 1)"
+
+  # Memory configuration (STM for session tracking)
+  memory:
+    type: stm
+    # STM is ephemeral and scoped to the conversation/session
+    # Tracks uploaded files within the current session
+
+  # Network configuration
+  port: 9000
+
+  # Scaling (use AgentCore defaults)
+  scaling:
+    min_instances: 0
+    max_instances: 10
+
+  # Timeout settings
+  timeout:
+    invoke_timeout_seconds: 300  # 5 minutes max for file operations
+
+  # Health check
+  health_check:
+    path: /health
+    interval_seconds: 30
+
+# Environment variables
+environment:
+  # AWS Configuration
+  AWS_REGION: us-east-2
+  AWS_ACCOUNT_ID: "377311924364"
+
+  # S3 Bucket for documents
+  DOCUMENTS_BUCKET: faiston-one-sga-documents-prod
+
+  # Logging level
+  LOG_LEVEL: INFO
+
+# Agent metadata
+metadata:
+  name: FaistonInventoryHub
+  version: "2026-01-21"
+  phase: "1-secure-file-ingestion"
+  owner: "faiston-sga-team"
+  tags:
+    - inventory
+    - file-upload
+    - phase-1

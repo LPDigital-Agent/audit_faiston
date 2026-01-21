@@ -1,0 +1,56 @@
+# =============================================================================
+# AWS Bedrock AgentCore Runtime Dependencies - Faiston SGA Inventory
+# =============================================================================
+# MINIMAL DEPENDENCIES - Cold start must complete in <30 seconds!
+#
+# Framework: AWS Strands Agents with A2A Protocol (per CLAUDE.md mandate)
+# Module: Gestao de Ativos -> Gestao de Estoque
+# Protocol: A2A (Agent-to-Agent) - JSON-RPC 2.0, Port 9000
+#
+# IMPORTANT: AgentCore Runtime ≠ Lambda!
+# Lambda has boto3/botocore pre-installed, AgentCore Runtime does NOT.
+# The CI workflow (deploy-agentcore-sga-agents.yml) handles dependency packaging.
+#
+# NF XML Parsing:
+# Using Python stdlib xml.etree.ElementTree (no external dependency needed)
+# REMOVED lxml - violates CLAUDE.md cold start rules (C extension, ~50MB)
+#
+# Migration: BedrockAgentCoreApp (HTTP) → A2AServer (A2A)
+# Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
+# =============================================================================
+
+# Core framework - AWS Strands A2A (REQUIRED)
+# PINNED to v1.22.0 for critical fixes:
+# - Gemini empty stream handling (fixes crashes)
+# - Concurrent agent protection (ConcurrencyException)
+# - Invocation state passing to model providers
+# Release: https://github.com/strands-agents/sdk-python/releases/tag/v1.22.0
+strands-agents[a2a,gemini]==1.22.0
+bedrock-agentcore>=0.1.0
+strands-agents-tools==0.2.19
+
+# A2A Server dependencies
+uvicorn>=0.30.0
+fastapi>=0.115.0
+
+# Google Gemini for LLM (used by Strands Agent)
+google-genai>=1.0.0
+
+# MCP Protocol for AgentCore Gateway communication
+# Used by agents to call PostgreSQL tools via Gateway MCP endpoint
+mcp>=0.1.0
+
+# PostgreSQL driver for Lambda MCP Tools (psycopg v3)
+# Used by postgres_tools_lambda.py to connect to Aurora via RDS Proxy
+# Note: psycopg[binary] includes compiled C libraries for performance
+psycopg[binary]>=3.1.0
+
+# Excel XLSX file parsing for ImportAgent
+# Pure Python library (~3MB), safe for cold start
+# Used by tools/csv_parser.py for spreadsheet imports
+openpyxl>=3.1.0
+
+# Excel XLS (97-2003) file parsing for Smart Import
+# Pure Python library (~500KB), safe for cold start
+# Used by tools/sheet_analyzer.py for legacy Excel files
+xlrd>=2.0.1
