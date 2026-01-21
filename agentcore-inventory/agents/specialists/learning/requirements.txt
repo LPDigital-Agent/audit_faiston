@@ -1,0 +1,25 @@
+# =============================================================================
+# LearningAgent - Python Dependencies
+# =============================================================================
+# MINIMAL dependencies for cold start optimization (<30s).
+#
+# AgentCore provides many libraries pre-installed:
+# - boto3, botocore
+# - httpx
+# - pydantic
+#
+# Reference:
+#   https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-preinstalled.html
+# =============================================================================
+
+
+# AWS Bedrock AgentCore SDK
+bedrock-agentcore>=0.1.0
+
+# X-Ray tracing (optional but recommended)
+aws-xray-sdk>=2.14.0
+
+# Pydantic for data validation (may be pre-installed)
+pydantic>=2.0.0
+
+# Note: httpx, boto3, botocore are pre-installed in AgentCore runtime
