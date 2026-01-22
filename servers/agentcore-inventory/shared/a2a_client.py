@@ -101,6 +101,8 @@ PROD_RUNTIME_IDS = {
     "schema_mapper": "faiston_schema_mapper-7fxI9bFHzd",
     # Phase 4: Data Transformer - Cognitive ETL with error enrichment
     "data_transformer": "faiston_data_transformer-xjSXPo8HaC",
+    # RepairAgent - Software Surgeon for automated code repairs
+    "repair": "faiston_sga_repair-qrBCLNGC4S",
 }
 
 # Dev runtime IDs (only for agents that have dev deployments)
@@ -237,6 +239,18 @@ KNOWN_CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "skills": [
             "start_transformation", "get_job_status", "load_preferences",
             "save_preferences", "check_notifications", "health_check"
+        ],
+    },
+    "repair": {
+        "name": "RepairAgent",
+        "description": "Software Surgeon - Automated code repair specialist",
+        "skills": [
+            "create_fix_branch",
+            "commit_fix",
+            "create_pr",
+            "validate_python_ast",
+            "run_targeted_tests",
+            "health_check",
         ],
     },
 }
@@ -1462,6 +1476,8 @@ class LocalA2AClient(A2AClient):
         "inventory_analyst": "http://127.0.0.1:9017/",  # InventoryAnalyst - File structure analysis
         "schema_mapper": "http://127.0.0.1:9018/",  # SchemaMapper - Semantic column mapping
         "data_transformer": "http://127.0.0.1:9019/",  # DataTransformer - Cognitive ETL
+        # RepairAgent - Software Surgeon for automated code repairs
+        "repair": "http://127.0.0.1:9020/",  # RepairAgent - Automated fix specialist
     }
 
     def __init__(self, base_port: int = 9000):

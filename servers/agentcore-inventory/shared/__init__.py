@@ -79,6 +79,12 @@ from shared.debug_utils import (
     debug_aws_error,
 )
 
+# Message Utils exports (BUG-039: Strands Message Extraction)
+from shared.message_utils import (
+    extract_text_from_message,
+    safe_message_lower,
+)
+
 __all__ = [
     # Audit Emitter
     "AgentAuditEmitter",
@@ -126,4 +132,7 @@ __all__ = [
     "debug_json_error",
     "debug_http_error",
     "debug_aws_error",
+    # Message Utils (BUG-039: Strands Message Extraction)
+    "extract_text_from_message",
+    "safe_message_lower",
 ]

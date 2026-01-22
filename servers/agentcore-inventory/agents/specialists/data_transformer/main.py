@@ -29,17 +29,15 @@
 # VERSION: 2026-01-21T21:00:00Z (Phase 4 initial)
 # =============================================================================
 
-import asyncio
 import json
 import logging
-from typing import Any, Dict, List, Optional
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
 from a2a.types import AgentSkill
 
 # Agent utilities
-from agents.utils import create_gemini_model, create_agent_skill, AGENT_VERSION
+from agents.utils import create_gemini_model, AGENT_VERSION
 
 # Hooks (per ADR-002)
 from shared.hooks.logging_hook import LoggingHook
@@ -47,13 +45,10 @@ from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.debug_hook import DebugHook
 
 # AUDIT-003: Global error capture for Debug Agent enrichment
-from shared.debug_utils import debug_error
 
 # Cognitive error handler (Nexo Immune System)
-from shared.cognitive_error_handler import cognitive_error_handler
 
 # Structured output schemas
-from shared.agent_schemas import TransformationResult, TransformationStatus
 
 # Tools
 from .tools import (

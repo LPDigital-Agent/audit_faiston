@@ -274,6 +274,100 @@ def _create_fallback_response(error: Exception) -> Dict[str, Any]:
     }
 
 
+async def _invoke_repair_agent(
+    error: Exception,
+    context: Dict[str, Any],
+    debug_analysis: Dict[str, Any],
+    session_id: Optional[str] = None,
+    timeout: float = 120.0,  # 2 minutes for Git operations
+) -> Dict[str, Any]:
+    """
+    Invoke RepairAgent to attempt automated fix.
+
+    This function is called by cognitive_error_handler when DebugAgent
+    returns suggested_action == "repair" in its analysis.
+
+    Args:
+        error: The original exception
+        context: Error context from cognitive handler
+        debug_analysis: DebugAgent analysis with root causes
+        session_id: Session ID for tracing
+        timeout: Max time for repair operations
+
+    Returns:
+        Repair result dict with fix_applied, pr_url, etc.
+        {
+            "fix_applied": bool,
+            "branch_name": str | None,
+            "pr_url": str | None,
+            "error": str | None,
+            ...
+        }
+    """
+    from shared.a2a_client import A2AClient
+
+    try:
+        client = A2AClient()
+
+        # Build RepairAgent payload
+        repair_payload = {
+            "action": "apply_fix",
+            "error_signature": debug_analysis.get("error_signature", ""),
+            "error_type": debug_analysis.get("error_type", ""),
+            "root_causes": debug_analysis.get("root_causes", []),
+            "suggested_fix": debug_analysis.get("suggested_fix", ""),
+            "file_context": context,
+            "debug_analysis": debug_analysis,
+        }
+
+        logger.info(
+            f"[CognitiveMiddleware] Invoking RepairAgent for error: "
+            f"{debug_analysis.get('error_signature', 'unknown')}"
+        )
+
+        # Invoke RepairAgent
+        result = await client.invoke_agent(
+            agent_id="repair",
+            payload=repair_payload,
+            session_id=session_id,
+            timeout=timeout,
+        )
+
+        if result.success:
+            import json
+            try:
+                repair_result = json.loads(result.response)
+                logger.info(
+                    f"[CognitiveMiddleware] RepairAgent completed. "
+                    f"Fix applied: {repair_result.get('fix_applied', False)}"
+                )
+                return repair_result
+            except json.JSONDecodeError:
+                logger.error(
+                    f"[CognitiveMiddleware] RepairAgent returned invalid JSON: "
+                    f"{result.response[:200]}"
+                )
+                return {
+                    "fix_applied": False,
+                    "error": "RepairAgent response was not valid JSON",
+                }
+        else:
+            logger.warning(
+                f"[CognitiveMiddleware] RepairAgent invocation failed: {result.error}"
+            )
+            return {
+                "fix_applied": False,
+                "error": result.error or "RepairAgent invocation failed",
+            }
+
+    except Exception as e:
+        logger.error(f"[CognitiveMiddleware] Error invoking RepairAgent: {e}")
+        return {
+            "fix_applied": False,
+            "error": str(e),
+        }
+
+
 # =============================================================================
 # Cognitive Error Handler Decorator
 # =============================================================================
@@ -346,6 +440,45 @@ def cognitive_error_handler(agent_id: str):
 
                 # Enrich error via DebugAgent
                 enriched = await _enrich_with_debug_agent(e, context)
+
+                # ============================================================
+                # RepairAgent Trigger (BUG-044 Implementation)
+                # ============================================================
+                # If DebugAgent suggests repair, attempt automated fix
+                suggested_action = enriched.get("suggested_action", "")
+
+                if suggested_action == "repair":
+                    logger.info(
+                        f"[CognitiveMiddleware] DebugAgent suggested repair for {agent_id}. "
+                        f"Invoking RepairAgent..."
+                    )
+
+                    # Invoke RepairAgent via A2A
+                    repair_result = await _invoke_repair_agent(
+                        error=e,
+                        context=context,
+                        debug_analysis=enriched,
+                        session_id=kwargs.get("session_id"),
+                    )
+
+                    # If repair succeeded, include repair details in enriched error
+                    if repair_result.get("fix_applied"):
+                        enriched["repair_applied"] = True
+                        enriched["repair_details"] = repair_result
+                        logger.info(
+                            f"[CognitiveMiddleware] RepairAgent successfully applied fix: "
+                            f"PR {repair_result.get('pr_url')}"
+                        )
+                    else:
+                        enriched["repair_applied"] = False
+                        enriched["repair_error"] = repair_result.get("error")
+                        logger.warning(
+                            f"[CognitiveMiddleware] RepairAgent failed to apply fix: "
+                            f"{repair_result.get('error')}"
+                        )
+                # ============================================================
+                # END RepairAgent Trigger
+                # ============================================================
 
                 # Raise enriched error
                 raise CognitiveError(

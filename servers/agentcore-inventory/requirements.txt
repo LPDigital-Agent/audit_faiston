@@ -60,3 +60,8 @@ xlrd>=2.0.1
 # IMPORTANT: Uses nrows=5 limit - NEVER loads full files into memory
 # ARM64 wheel available via numpy dependency
 pandas>=2.0.0
+
+# Text slugification for RepairAgent Git branch naming
+# Pure Python library (~100KB), generates safe Git branch names from error descriptions
+# Used by agents/specialists/repair/tools/git_ops.py for branch name generation
+python-slugify>=8.0.0

@@ -42,6 +42,9 @@ from shared.hooks import LoggingHook, MetricsHook, DebugHook
 # AUDIT-001: Pydantic response schema for Strands structured output
 from shared.agent_schemas import DebugAnalysisResponse
 
+# DebugAgent v2: Code Inspector Tool for active code investigation
+from agents.specialists.debug.tools.code_inspector import read_code_snippet_tool
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -86,6 +89,13 @@ MEMORY_NAMESPACE = "/strategy/debug/error_patterns"
 # =============================================================================
 
 AGENT_SKILLS = [
+    # DebugAgent v2: Active Code Investigation (USE FIRST)
+    AgentSkill(
+        id="read_code_snippet",
+        name="Read Code Snippet",
+        description="Read source code at specific line numbers to inspect error locations. Provides context lines before/after with visual error marker. USE THIS FIRST for any error with a stack trace.",
+        tags=["debug", "code", "inspection", "investigation", "v2"],
+    ),
     AgentSkill(
         id="analyze_error",
         name="Analyze Error",
@@ -135,23 +145,56 @@ AGENT_SKILLS = [
 # System Prompt (ReAct Pattern - Debug Specialist)
 # =============================================================================
 
-SYSTEM_PROMPT = """You are the **DebugAgent** (Error Analysis Agent) for the SGA (Sistema de Gestao de Ativos) system.
+SYSTEM_PROMPT = """You are the **NEXO Debug Investigator (v2)** - an expert error analyst and code detective for the SGA (Sistema de Gestão de Ativos) inventory system.
 
 ## Your Role
 
-You provide intelligent error analysis and debugging support:
-1. **ANALYZE** errors with deep reasoning (root cause identification)
-2. **SEARCH** relevant documentation for context
-3. **FIND** similar patterns from historical errors
-4. **SUGGEST** debugging steps with confidence levels
+You are NOT a passive error analyzer. You are an ACTIVE CODE INVESTIGATOR who:
+1. **READS** the actual source code at error locations
+2. **ANALYZES** patterns and root causes with deep reasoning
+3. **PROPOSES** specific fixes with actual code corrections
+
+## Investigative Workflow (MANDATORY)
+
+For EVERY error investigation, you MUST follow this workflow:
+
+### Step 1: Parse the Error
+- Extract error type, message, and operation
+- Identify file path and line number from stack trace
+
+### Step 2: INSPECT THE CODE (CRITICAL)
+- Use `read_code_snippet` to read the actual code at the error line
+- Always request context (default 10 lines before/after)
+- Understand WHAT the code is trying to do
+
+### Step 3: Check Historical Patterns
+- Use `query_memory_patterns` to find similar past errors
+- Learn from previous resolutions
+
+### Step 4: Search External Resources (Only If Needed)
+- Use `search_documentation` for AWS/AgentCore/Strands docs
+- Use `search_stackoverflow` for community solutions
+- Use `search_github_issues` for known framework issues
+
+### Step 5: Propose Fix with Actual Code
+- Provide the EXACT code change needed
+- Include before/after comparison
+- Explain WHY the fix works
 
 ## Analysis Output Format
 
-For each error, you MUST provide:
+Your final analysis MUST include:
+
 ```json
 {
   "error_type": "ErrorClassName",
-  "technical_explanation": "Clear technical explanation in Portuguese (pt-BR)",
+  "technical_explanation": "Clear explanation in Portuguese (pt-BR)",
+  "code_investigation": {
+    "file_inspected": "path/to/file.py",
+    "error_line": 42,
+    "problematic_code": "The actual line of code",
+    "issue_identified": "What's wrong with this code"
+  },
   "root_causes": [
     {
       "cause": "Description of potential cause",
@@ -159,48 +202,44 @@ For each error, you MUST provide:
       "evidence": ["List of supporting evidence"]
     }
   ],
+  "proposed_fix": {
+    "description": "What needs to change",
+    "before": "Original code snippet",
+    "after": "Corrected code snippet",
+    "explanation": "Why this fix resolves the issue"
+  },
   "debugging_steps": [
     "Step 1: First action to take",
     "Step 2: Second action to take"
-  ],
-  "documentation_links": [
-    {
-      "title": "Relevant doc title",
-      "url": "Documentation URL",
-      "relevance": "Why this doc is relevant"
-    }
-  ],
-  "similar_patterns": [
-    {
-      "pattern_id": "Historical pattern ID",
-      "similarity": 0.9,
-      "resolution": "How it was resolved"
-    }
   ],
   "recoverable": true,
   "suggested_action": "retry|fallback|escalate|abort"
 }
 ```
 
-## Analysis Priority
-
-1. **Pattern Match First**: Check AgentCore Memory for similar errors
-2. **Documentation Second**: Search MCP gateways for relevant docs
-3. **Reasoning Third**: Apply deep reasoning with Thinking mode
-
 ## Critical Rules
 
-1. **ALWAYS** provide technical explanations in Portuguese (pt-BR)
-2. **ALWAYS** include confidence levels for root causes
-3. **NEVER** guess - express uncertainty when appropriate
-4. **STORE** successful resolutions for future reference
-5. **PRIORITIZE** patterns from memory over general knowledge
+1. **ALWAYS INSPECT CODE FIRST**: Never analyze an error without reading the actual source
+2. **Technical explanations in pt-BR**: All user-facing text must be Portuguese
+3. **NEVER GUESS**: Express uncertainty, use confidence levels
+4. **STORE SUCCESSFUL RESOLUTIONS**: Help future debugging with `store_resolution`
+5. **PROPOSE ACTUAL FIXES**: Don't just describe - show the exact code change
+
+## Available Tools
+
+1. `read_code_snippet` - Read source code at error locations (USE THIS FIRST)
+2. `analyze_error` - Deep error analysis with pattern matching
+3. `query_memory_patterns` - Historical error patterns from AgentCore Memory
+4. `search_documentation` - AWS/AgentCore/Strands documentation
+5. `search_stackoverflow` - Real-time Stack Overflow answers
+6. `search_github_issues` - Known issues in strands-agents, boto3, etc.
+7. `store_resolution` - Record successful fixes for future learning
 
 ## Error Categories
 
 - **Recoverable**: Network timeouts, rate limits, transient failures
 - **Non-recoverable**: Validation errors, permission denied, missing resources
-- **Unknown**: Requires manual investigation
+- **Unknown**: Requires manual investigation + code inspection
 
 ## Language
 
@@ -584,6 +623,55 @@ async def search_github_issues(
 
 
 # =============================================================================
+# DebugAgent v2: Code Inspector Tool Wrapper
+# =============================================================================
+
+@tool
+async def read_code_snippet(
+    file_path: str,
+    line_number: int,
+    context_lines: int = 10,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Read source code snippet at a specific line for error investigation.
+
+    USE THIS TOOL FIRST when analyzing any error with a stack trace.
+    This enables you to SEE the actual code where the error occurred.
+
+    Args:
+        file_path: Path to the file (relative to project root or absolute)
+        line_number: Line number to highlight (1-indexed)
+        context_lines: Number of lines before/after to include (default 10, max 50)
+        session_id: Optional session ID for logging
+
+    Returns:
+        Dict with success status, formatted snippet with line numbers,
+        and the target line content. Visual marker (->) on error line.
+
+    Example:
+        read_code_snippet("agents/utils.py", 42, context_lines=5)
+    """
+    logger.info(f"[{AGENT_NAME}] READ_CODE: {file_path}:{line_number}")
+
+    try:
+        result = await read_code_snippet_tool(
+            file_path=file_path,
+            line_number=line_number,
+            context_lines=context_lines,
+            session_id=session_id,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] read_code_snippet failed: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "file": file_path,
+        }
+
+
+# =============================================================================
 # Strands Agent Configuration
 # =============================================================================
 
@@ -599,14 +687,18 @@ def create_agent() -> Agent:
         description=AGENT_DESCRIPTION,
         model=create_gemini_model(AGENT_ID),  # GeminiModel via Google AI Studio
         tools=[
+            # v2 Investigation Tool (USE FIRST for stack traces)
+            read_code_snippet,
+            # Core analysis tools
             analyze_error,
-            search_documentation,
             query_memory_patterns,
             store_resolution,
+            # Documentation and external search
+            search_documentation,
+            search_stackoverflow,  # BUG-034
+            search_github_issues,  # BUG-034
+            # Monitoring
             health_check,
-            # BUG-034: Real-time external search tools
-            search_stackoverflow,
-            search_github_issues,
         ],
         system_prompt=SYSTEM_PROMPT,
         hooks=[LoggingHook(), MetricsHook(), DebugHook(timeout_seconds=30.0)],  # TIMEOUT-FIX: Maximum for Gemini Pro

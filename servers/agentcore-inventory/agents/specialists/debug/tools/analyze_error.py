@@ -81,7 +81,8 @@ def generate_error_signature(
         Hash-based error signature
     """
     # Normalize message by removing variable content
-    normalized_msg = message.lower()
+    # BUG-039: Defensive coding - handle non-string messages
+    normalized_msg = str(message).lower() if message else ""
     # Remove UUIDs
     normalized_msg = re.sub(
         r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",

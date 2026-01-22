@@ -96,7 +96,8 @@ def emit_agent_event(
 # =============================================================================
 
 # Maximum number of recent events to return
-MAX_RECENT_EVENTS = 50
+MAX_RECENT_EVENTS = 100  # Validated: 100 events for full repair cycle visibility
+MAX_MESSAGE_LENGTH = 1024  # 1KB limit per event message (validated requirement)
 
 # Primary agents to show in Agent Room (in display order, grouped by function)
 PRIMARY_AGENTS = [
@@ -248,11 +249,16 @@ def get_recent_events(
     for event in events:
         try:
             humanized_event = humanize_audit_entry(event)
+            # Truncate message to prevent large payloads (validated: 1KB limit)
+            message = humanized_event["message"]
+            if len(message) > MAX_MESSAGE_LENGTH:
+                message = message[:MAX_MESSAGE_LENGTH] + "..."
+
             humanized.append({
                 "id": event.get("event_id", event.get("SK", "")),
                 "timestamp": humanized_event["timestamp"],
                 "agentName": humanized_event["agent"],
-                "message": humanized_event["message"],
+                "message": message,
                 "type": humanized_event["type"],
                 "eventType": humanized_event.get("event_type", "unknown"),
             })

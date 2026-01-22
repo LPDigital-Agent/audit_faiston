@@ -34,6 +34,7 @@ class SuggestedAction(str, Enum):
     ESCALATE = "escalate"
     ABORT = "abort"
     INVESTIGATE = "investigate"
+    REPAIR = "repair"  # NEW: Trigger RepairAgent for automated fix
 
 
 class AnalysisSource(str, Enum):
@@ -533,6 +534,80 @@ class DebugAnalysisResponse(AgentResponseBase):
     llm_powered: bool = Field(
         default=True,
         description="Whether AI (Gemini) was used for analysis"
+    )
+
+
+class RepairResponse(AgentResponseBase):
+    """
+    Response from RepairAgent (Software Surgeon).
+
+    Contains automated fix details including Git operations,
+    syntax validation results, and PR information.
+    """
+    # Fix metadata
+    fix_applied: bool = Field(
+        default=False,
+        description="Whether the fix was successfully applied"
+    )
+    fix_description: str = Field(
+        default="",
+        description="Description of the fix that was applied"
+    )
+
+    # Git operations
+    branch_name: Optional[str] = Field(
+        default=None,
+        description="Git branch where fix was committed (e.g., 'fix/BUG-044-validation-error')"
+    )
+    commit_sha: Optional[str] = Field(
+        default=None,
+        description="Git commit SHA for the fix"
+    )
+    pr_url: Optional[str] = Field(
+        default=None,
+        description="Pull request URL (draft PR for review)"
+    )
+
+    # Validation results
+    syntax_valid: bool = Field(
+        default=False,
+        description="Whether syntax validation passed (AST parsing)"
+    )
+    tests_passed: bool = Field(
+        default=False,
+        description="Whether targeted tests passed after fix"
+    )
+
+    # File changes
+    files_modified: List[str] = Field(
+        default_factory=list,
+        description="List of files modified by the fix"
+    )
+    diff_summary: str = Field(
+        default="",
+        description="Brief summary of code changes"
+    )
+
+    # Safety checks
+    protected_branch_check: bool = Field(
+        default=True,
+        description="Whether branch protection rules were validated"
+    )
+    loop_prevention: bool = Field(
+        default=True,
+        description="Whether loop detection passed (max 3 attempts)"
+    )
+
+    # Audit trail (from SecurityAuditHook)
+    audit_id: Optional[str] = Field(
+        default=None,
+        description="DynamoDB audit record ID for this repair"
+    )
+
+    # Human message
+    human_message: str = Field(
+        default="",
+        description="User-facing message in pt-BR about repair status"
     )
 
 
@@ -1103,6 +1178,7 @@ __all__ = [
     "ComplianceResponse",
     "IntakeResponse",
     "DebugAnalysisResponse",
+    "RepairResponse",
     "LearningResponse",
     "ObservationResponse",
     "SchemaEvolutionResponse",

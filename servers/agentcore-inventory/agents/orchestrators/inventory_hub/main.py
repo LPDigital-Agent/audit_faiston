@@ -61,6 +61,10 @@ from agents.tools.intake_tools import (
     ALLOWED_FILE_TYPES,
 )
 
+# BUG-043 FIX: Direct tool import for file analysis (bypasses LLM apology loop)
+# File structure analysis is deterministic - no LLM reasoning needed
+from agents.tools.analysis_tools import get_file_structure
+
 # Hooks (per ADR-002)
 from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
@@ -68,6 +72,9 @@ from shared.hooks.debug_hook import DebugHook
 
 # AUDIT-003: Global error capture for Debug Agent enrichment
 from shared.debug_utils import debug_error
+
+# BUG-039: Message extraction for Strands SDK multi-format responses
+from shared.message_utils import extract_text_from_message
 
 # Phase 2: A2A client for calling InventoryAnalyst specialist
 from shared.a2a_client import A2AClient
@@ -224,9 +231,12 @@ When a user wants to upload a file:
 4. When user confirms upload, call `verify_file_availability`
 5. Confirm success or suggest retry on failure
 
-### Phase 2: Analysis Workflow (after upload verified)
+### Phase 2: Analysis Workflow (Direct Tool Call - BUG-043 FIX)
 After verifying the upload:
 1. Call `analyze_file_structure` with the s3_key from verify_file_availability
+   - **BUG-043 FIX:** Tool calls get_file_structure DIRECTLY (no LLM intermediary)
+   - This guarantees structured JSON output - no "apology parsing" needed
+   - Error types (FILE_NOT_FOUND, PARSE_ERROR) are preserved for frontend display
 2. Present the file structure to the user:
    - Number of columns detected
    - Column names (in their original format)
@@ -456,7 +466,25 @@ def health_check() -> str:
 
 
 # =============================================================================
-# Phase 2: File Structure Analysis Tool (A2A)
+# Phase 2: File Structure Analysis Tool (Direct Call - BUG-043 FIX)
+# =============================================================================
+# BUG-043 FIX: Changed from A2A call to direct tool invocation.
+#
+# PROBLEM: When get_file_structure tool fails, the inventory_analyst LLM
+# generates apologetic Portuguese text ("Desculpe, não consegui...") instead
+# of returning the structured error JSON. This causes:
+# 1. Original error details (FILE_NOT_FOUND, PARSE_ERROR) to be LOST
+# 2. TOOL_FAILURE error with no actionable information for user
+#
+# SOLUTION: Call get_file_structure DIRECTLY without LLM intermediary.
+# File structure analysis is deterministic Python code - no reasoning needed.
+# This aligns with "Mode 2.5 Direct Action" pattern used for S3 uploads.
+#
+# BENEFITS:
+# - Guaranteed structured JSON output (no apology risk)
+# - Error types preserved for frontend display
+# - Faster (no A2A network hop, no LLM inference)
+# - Lower cost (no Gemini API call)
 # =============================================================================
 
 
@@ -465,8 +493,9 @@ def analyze_file_structure(s3_key: str) -> str:
     """
     Analyze the structure of an uploaded inventory file.
 
-    This tool invokes the InventoryAnalyst specialist agent via A2A protocol
-    to inspect the file structure without loading the full content.
+    BUG-043 FIX: Direct tool call instead of A2A to inventory_analyst.
+    This avoids the "LLM apology loop" where the LLM generates apologetic
+    text instead of passing through tool errors.
 
     Use this AFTER verifying the file exists with verify_file_availability.
 
@@ -479,7 +508,7 @@ def analyze_file_structure(s3_key: str) -> str:
 
     Args:
         s3_key: The S3 object key returned from verify_file_availability.
-            Example: "temp/uploads/abc123_inventory.csv"
+            Example: "uploads/user123/session456/inventory.csv"
 
     Returns:
         JSON string with file structure analysis:
@@ -500,20 +529,6 @@ def analyze_file_structure(s3_key: str) -> str:
             "error_type": "ERROR_TYPE"
         }
     """
-    import asyncio
-
-    async def _invoke_analyst() -> dict:
-        """Async wrapper for A2A invocation."""
-        a2a_client = A2AClient()
-        prompt = f"Analyze the file structure at s3_key: {s3_key}"
-        return await a2a_client.invoke_agent(
-            agent_id="inventory_analyst",  # BUG-FIX: was agent_name
-            payload={
-                "prompt": prompt,
-                "s3_key": s3_key,
-            },
-        )
-
     try:
         if not s3_key:
             return json.dumps({
@@ -522,31 +537,44 @@ def analyze_file_structure(s3_key: str) -> str:
                 "error_type": "VALIDATION_ERROR",
             })
 
-        # BUG-FIX: Use asyncio.run() to bridge sync tool with async A2A client
-        result = asyncio.run(_invoke_analyst())
+        # BUG-043 FIX: Direct tool call (no LLM intermediary)
+        # This guarantees structured JSON output with preserved error details
+        logger.info(f"[InventoryHub] Phase 2: Analyzing file structure for {s3_key}")
+        result = get_file_structure(s3_key)
 
-        # A2AResponse has .response attribute with the actual data
-        response_data = getattr(result, "response", result)
-        if isinstance(response_data, dict):
-            if response_data.get("success"):
-                return json.dumps(response_data)
-            # Handle error from analyst
-            debug_error(
-                Exception(response_data.get("error", "Unknown error")),
-                "analyze_file_structure",
-                {"s3_key": s3_key, "error_type": response_data.get("error_type")},
-            )
-            return json.dumps(response_data)
+        # Parse to verify valid JSON and log outcome
+        try:
+            parsed = json.loads(result)
+            if parsed.get("success"):
+                columns = parsed.get("columns", [])
+                logger.info(
+                    f"[InventoryHub] File analysis succeeded: {len(columns)} columns detected"
+                )
+            else:
+                error_type = parsed.get("error_type", "UNKNOWN")
+                logger.warning(
+                    f"[InventoryHub] File analysis failed: {error_type} - {parsed.get('error', 'No details')}"
+                )
+                # Route error to DebugAgent for enrichment
+                debug_error(
+                    Exception(parsed.get("error", "Analysis failed")),
+                    "analyze_file_structure",
+                    {"s3_key": s3_key, "error_type": error_type},
+                )
+        except json.JSONDecodeError:
+            # Shouldn't happen - get_file_structure always returns valid JSON
+            logger.error(f"[InventoryHub] Invalid JSON from get_file_structure: {result[:200]}")
 
-        # Fallback: return raw response
-        return json.dumps({"success": True, "response": str(response_data)})
+        return result
 
     except Exception as e:
+        # Catch-all for unexpected errors
         debug_error(e, "analyze_file_structure", {"s3_key": s3_key})
+        logger.exception(f"[InventoryHub] Unexpected error in analyze_file_structure: {e}")
         return json.dumps({
             "success": False,
-            "error": f"A2A call failed: {str(e)}",
-            "error_type": "A2A_ERROR",
+            "error": f"Analysis error: {str(e)}",
+            "error_type": "ANALYSIS_ERROR",
         })
 
 
@@ -1209,7 +1237,7 @@ def request_health_analysis(user_id: str, lookback_days: int = 7) -> str:
 # Pattern: uploads/{user_id}/{session_id}/{safe_filename}
 # =============================================================================
 
-DIRECT_ACTIONS = {"get_nf_upload_url", "verify_file"}
+DIRECT_ACTIONS = {"get_nf_upload_url", "verify_file", "nexo_analyze_file", "get_agent_room"}
 
 
 @cognitive_sync_handler("inventory_hub")
@@ -1341,6 +1369,11 @@ def _handle_direct_action(action: str, payload: dict, user_id: str, session_id: 
         return _handle_get_nf_upload_url(payload, user_id, session_id)
     elif action == "verify_file":
         return _handle_verify_file(payload)
+    elif action == "nexo_analyze_file":
+        # BUG-044 FIX: Direct call bypasses A2A/LLM path
+        return _handle_nexo_analyze_file(payload)
+    elif action == "get_agent_room":
+        return _handle_get_agent_room(payload, user_id, session_id)
     else:
         raise ValueError(f"Ação desconhecida: '{action}'. Ações válidas: {', '.join(DIRECT_ACTIONS)}")
 
@@ -1394,7 +1427,14 @@ def _handle_get_nf_upload_url(payload: dict, user_id: str, session_id: str) -> d
     # 🛡️ SECURITY ENFORCEMENT: Actor-Isolated Path
     # Prevent directory traversal by sanitizing filename
     safe_filename = filename.replace("/", "_").replace("\\", "_").replace("..", "_")
-    s3_key = f"uploads/{user_id}/{session_id}/{safe_filename}"
+
+    # BUG-040 FIX: Normalize filename to NFC Unicode form
+    # macOS/browsers may send NFD (decomposed), e.g., "Ç" as "C" + combining cedilla
+    # S3 treats keys as raw bytes, so NFD ≠ NFC → NoSuchKey errors
+    # NFC is the standard form; normalization is idempotent for already-NFC strings
+    import unicodedata
+    normalized_filename = unicodedata.normalize("NFC", safe_filename)
+    s3_key = f"uploads/{user_id}/{session_id}/{normalized_filename}"
 
     # URL-encode filename to ensure ASCII compliance (S3 metadata RFC 2616)
     # CRITICAL: This encoded value MUST be sent by frontend as x-amz-meta-original_filename header
@@ -1487,6 +1527,100 @@ def _handle_verify_file(payload: dict) -> dict:
             "content_type": result.get("content_type"),
             "ready_for_processing": result.get("exists", False),
         },
+    }
+
+
+@cognitive_sync_handler("inventory_hub")
+def _handle_nexo_analyze_file(payload: dict) -> dict:
+    """
+    Analyze file structure directly (Mode 2.5 - no LLM).
+
+    BUG-044 FIX: Bypass A2A/LLM path to prevent apology generation.
+    Uses get_file_structure tool directly for deterministic execution.
+
+    Acceptance Criteria: < 2 seconds latency (validated via plan interrogation)
+
+    Args:
+        payload: {s3_key: str}
+
+    Returns:
+        {
+            "success": true,
+            "specialist_agent": "analyst",
+            "response": {
+                "columns": [...],
+                "sample_data": [...],
+                "row_count_estimate": int,
+                "detected_format": str,
+                ...
+            }
+        }
+    """
+    import unicodedata
+
+    from agents.tools.analysis_tools import get_file_structure
+
+    s3_key = payload.get("s3_key")
+    if not s3_key:
+        raise ValueError("O parâmetro 's3_key' é obrigatório para análise de arquivo")
+
+    # BUG-044: Normalize s3_key to NFC before processing (Portuguese filename support)
+    s3_key = unicodedata.normalize("NFC", s3_key)
+
+    # Direct call to get_file_structure (no A2A, no LLM)
+    result_json = get_file_structure(s3_key)
+    result = json.loads(result_json)
+
+    # If tool failed, raise to trigger CognitiveError enrichment
+    if not result.get("success", False):
+        error_msg = result.get("error", "Falha ao analisar estrutura do arquivo")
+        error_type = result.get("error_type", "ANALYSIS_ERROR")
+        raise RuntimeError(f"[{error_type}] {error_msg}")
+
+    # Return in standard envelope format
+    return {
+        "success": True,
+        "specialist_agent": "analyst",
+        "response": result,
+    }
+
+
+@cognitive_sync_handler("inventory_hub")
+def _handle_get_agent_room(payload: dict, user_id: str, session_id: str) -> dict:
+    """
+    Get Agent Room data for the Control Room dashboard.
+
+    Mode 2.5 (Direct Action): Bypasses LLM for deterministic data aggregation.
+    Returns agent profiles, live feed events, and pending HIL decisions.
+
+    Args:
+        payload: Optional parameters (currently unused, extensible)
+        user_id: User identifier for access logging
+        session_id: Session identifier for context
+
+    Returns:
+        {
+            "success": true,
+            "specialist_agent": "control_room",
+            "response": {
+                "agents": [...],
+                "liveFeed": [...],
+                "pendingDecisions": [...],
+                ...
+            }
+        }
+    """
+    from tools.agent_room_service import get_agent_room_data
+
+    logger.info(f"[InventoryHub] Mode 2.5 get_agent_room: user={user_id}, session={session_id}")
+
+    # Get aggregated Agent Room data
+    result = get_agent_room_data(user_id=user_id, session_id=session_id)
+
+    return {
+        "success": True,
+        "specialist_agent": "control_room",
+        "response": result,
     }
 
 
@@ -1697,14 +1831,17 @@ def invoke(payload: dict, context) -> dict:
                 "error occurred",
                 "A2A call failed",
             ]
-            message_lower = message.lower() if isinstance(message, str) else ""
+            # BUG-039 v2: Extract text from complex Strands SDK message objects
+            # Strands SDK can return: str, Message (with .content[]), or dict (A2A format)
+            message_text = extract_text_from_message(message)
+            message_lower = message_text.lower()
             is_failure_message = any(indicator in message_lower for indicator in failure_indicators)
 
             if is_failure_message:
-                logger.warning(f"[InventoryHub] BUG-039: LLM text indicates tool failure: {message[:200]}")
+                logger.warning(f"[InventoryHub] BUG-039: LLM text indicates tool failure: {message_text[:200]}")
                 return {
                     "success": False,
-                    "error": message,  # Use LLM's explanation as the error message
+                    "error": message_text,  # Use extracted text as error message
                     "error_type": "TOOL_FAILURE",
                     "specialist_agent": "llm",
                     "agent_id": AGENT_ID,
@@ -1714,7 +1851,7 @@ def invoke(payload: dict, context) -> dict:
             return {
                 "success": True,
                 "specialist_agent": "llm",
-                "response": message,
+                "response": message_text,  # Use extracted text for consistency
                 "agent_id": AGENT_ID,
             }
 

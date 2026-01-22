@@ -252,6 +252,12 @@ class FileInspector:
                 error_type="VALIDATION_ERROR",
             )
 
+        # BUG-040 FIX: Normalize S3 key to NFC Unicode form for consistent lookup
+        # Prevents NoSuchKey errors when NFD (decomposed) vs NFC (composed) mismatch
+        # Example: "Ç" can be U+00C7 (NFC) or "C"+U+0327 (NFD) - S3 treats as different keys
+        import unicodedata
+        key = unicodedata.normalize("NFC", key)
+
         try:
             # Step 1: HEAD object for metadata
             head_response = self.s3_client.head_object(Bucket=bucket, Key=key)

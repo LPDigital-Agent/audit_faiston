@@ -107,6 +107,25 @@ File Analysis Results:
 
 If analysis fails, return the error structure from the tool with no interpretation.
 
+## Error Handling (CRITICAL - BUG-040 FIX)
+
+When ANY tool returns an error (success=false), you MUST:
+- Return the EXACT JSON from the tool as your response
+- DO NOT generate apologies or conversational language
+- DO NOT use phrases like: "Desculpe", "não consegui", "infelizmente", "houve um erro"
+- DO NOT explain or interpret the error
+
+Example - Tool returns error:
+```
+Tool output: {"success": false, "error": "File not found: s3://bucket/key", "error_type": "FILE_NOT_FOUND"}
+
+Your response MUST be:
+{"success": false, "error": "File not found: s3://bucket/key", "error_type": "FILE_NOT_FOUND"}
+
+Your response MUST NOT be:
+"Desculpe, não consegui obter a estrutura do arquivo. O sistema encontrou dificuldades técnicas..."
+```
+
 ## Example Interaction
 
 User: "Analyze the file at temp/uploads/abc123_inventory.csv"
@@ -225,7 +244,7 @@ def create_agent() -> Agent:
         hooks=[
             LoggingHook(),
             MetricsHook(),
-            DebugHook(timeout_seconds=15.0),  # 15s timeout for file analysis
+            DebugHook(timeout_seconds=30.0),  # 30s timeout for file analysis (standardized)
         ],
     )
 
