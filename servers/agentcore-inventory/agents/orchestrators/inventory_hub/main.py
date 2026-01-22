@@ -1678,14 +1678,18 @@ def invoke(payload: dict, context) -> dict:
                 except ValueError:
                     # Validation failed - re-raise to be caught by outer except
                     raise
+            # BUG-020 v8: Envelope for non-JSON text responses
             return {
                 "success": True,
+                "specialist_agent": "llm",
                 "response": message,
                 "agent_id": AGENT_ID,
             }
 
+        # BUG-020 v8: Envelope for fallback (result without .message)
         return {
             "success": True,
+            "specialist_agent": "llm",
             "response": str(result),
             "agent_id": AGENT_ID,
         }
