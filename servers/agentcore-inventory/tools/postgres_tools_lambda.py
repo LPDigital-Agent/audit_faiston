@@ -106,6 +106,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "sga_get_enum_values": handle_get_enum_values,
             # Schema evolution (dynamic column creation)
             "sga_create_column": handle_create_column,
+            # Batch operations (Phase 4 - DataTransformer ETL)
+            "sga_insert_pending_items_batch": handle_insert_pending_items_batch,
         }
 
         if actual_tool not in handlers:
@@ -579,4 +581,85 @@ def handle_create_column(arguments: Dict[str, Any]) -> Dict[str, Any]:
             "error": "unexpected_error",
             "message": str(e),
             "use_metadata_fallback": True,
+        }
+
+
+# =============================================================================
+# Batch Insert Handler (Phase 4 - DataTransformer ETL)
+# =============================================================================
+
+def handle_insert_pending_items_batch(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Batch insert rows into pending_entry_items table.
+
+    Called by DataTransformer agent during Phase 4 ETL.
+    session_id from agent = entry_id in database (FK to pending_entries).
+
+    Args:
+        rows: List of dicts with column names as keys (required)
+              Each row should have: line_number, part_number, description,
+              quantity, unit_value, total_value, serial_numbers, etc.
+        session_id: Import session ID = entry_id UUID (required)
+                    Must exist in pending_entries table (FK enforced)
+
+    Returns:
+        {
+            "success": bool,
+            "inserted_count": int,
+            "errors": list of row-level errors with row_index, error, row_data
+        }
+    """
+    from postgres_client import SGAPostgresClient
+
+    client = SGAPostgresClient()
+
+    rows = arguments.get("rows")
+    session_id = arguments.get("session_id")  # This is entry_id in DB
+
+    if not rows:
+        return {
+            "success": False,
+            "error": "rows is required",
+            "inserted_count": 0,
+            "errors": [],
+        }
+    if not session_id:
+        return {
+            "success": False,
+            "error": "session_id is required",
+            "inserted_count": 0,
+            "errors": [],
+        }
+    if not isinstance(rows, list):
+        return {
+            "success": False,
+            "error": "rows must be a list",
+            "inserted_count": 0,
+            "errors": [],
+        }
+
+    try:
+        logger.info(
+            f"[BatchInsert] Inserting {len(rows)} rows for session_id={session_id}"
+        )
+
+        result = client.insert_pending_items_batch(rows=rows, entry_id=session_id)
+
+        logger.info(
+            f"[BatchInsert] Result: success={result.get('success')}, "
+            f"inserted={result.get('inserted_count')}, errors={len(result.get('errors', []))}"
+        )
+
+        return result
+
+    except Exception as e:
+        debug_error(
+            e, "postgres_tools_insert_batch",
+            {"session_id": session_id, "row_count": len(rows) if rows else 0}
+        )
+        return {
+            "success": False,
+            "error": str(e),
+            "inserted_count": 0,
+            "errors": [{"row_index": -1, "error": str(e), "row_data": None}],
         }

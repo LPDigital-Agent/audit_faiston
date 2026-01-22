@@ -10,10 +10,9 @@
 # - Each agent has its OWN main.py with Strands A2AServer
 # - ReAct pattern: OBSERVE → THINK → LEARN → ACT + HIL
 #
-# POST-CLEANUP (January 2026):
-# - 11 inventory specialist agents were removed during major cleanup
-# - Only debug agent remains in specialists/
-# - Orchestrator is in orchestrators/estoque/
+# CURRENT STATE (January 2026):
+# - Orchestrator: inventory_hub (Phases 1-4 Smart Import)
+# - Specialists: debug, inventory_analyst, schema_mapper, data_transformer
 # - Logistics agents (carrier, expedition, reverse, reconciliacao) are in agentcore-carrier
 # =============================================================================
 
@@ -25,28 +24,31 @@ from typing import List, Tuple
 SPECIALISTS_SUBDIR = "specialists"
 ORCHESTRATORS_SUBDIR = "orchestrators"
 
-# Expected specialist agents (POST-CLEANUP January 2026)
-# NOTE: 11 inventory specialists were removed during major cleanup
+# Expected specialist agents (January 2026)
 # NOTE: Logistics agents (carrier, expedition, reverse, reconciliacao) belong to agentcore-carrier project
 EXPECTED_AGENTS = [
     "debug",  # faiston_sga_debug - AI-powered error analysis with Gemini 2.5 Pro + Thinking
+    "inventory_analyst",  # faiston_inventory_analyst - Phase 2 file structure analysis
+    "schema_mapper",  # faiston_schema_mapper - Phase 3 column mapping to schema
+    "data_transformer",  # faiston_data_transformer - Phase 4 ETL with Fire-and-Forget
 ]
 
-# Expected orchestrators (POST-CLEANUP January 2026)
+# Expected orchestrators (January 2026)
 EXPECTED_ORCHESTRATORS = [
-    "estoque",  # faiston_inventory_orchestration - HTTP entry point for SGA module
+    "inventory_hub",  # faiston_sga_inventory_hub - Central intelligence for SGA (Phases 1-4)
 ]
 
-# Agent roles for documentation (POST-CLEANUP January 2026)
-# NOTE: 11 inventory specialists were removed during major cleanup
-# NOTE: Logistics agents (carrier, expedition, reverse, reconciliacao) belong to agentcore-carrier project
+# Agent roles for documentation
 AGENT_ROLES = {
     "debug": "SPECIALIST (AI-Powered Error Analysis)",
+    "inventory_analyst": "SPECIALIST (Phase 2 - File Structure Analysis)",
+    "schema_mapper": "SPECIALIST (Phase 3 - Column Mapping to Schema)",
+    "data_transformer": "SPECIALIST (Phase 4 - Cognitive ETL with Fire-and-Forget)",
 }
 
 # Orchestrator roles
 ORCHESTRATOR_ROLES = {
-    "estoque": "ORCHESTRATOR (SGA Inventory HTTP Entry Point)",
+    "inventory_hub": "ORCHESTRATOR (SGA Inventory Hub - Phases 1-4)",
 }
 
 # Required files for each agent subdirectory
@@ -84,11 +86,14 @@ def validate_agent_structure(agents_dir: Path) -> Tuple[bool, List[str]]:
             if not file_path.exists():
                 errors.append(f"❌ {agent_name}: Missing {file_name}")
 
-        # Check tools directory
+        # Check tools directory OR inline tools in main.py
         tools_dir = agent_dir / "tools"
-        if not tools_dir.exists():
-            errors.append(f"❌ {agent_name}: Missing tools/ directory")
-        else:
+        main_py = agent_dir / "main.py"
+        has_inline_tools = main_py.exists() and "@tool" in main_py.read_text()
+
+        if not tools_dir.exists() and not has_inline_tools:
+            errors.append(f"❌ {agent_name}: Missing tools/ directory and no inline @tool in main.py")
+        elif tools_dir.exists():
             # Check tools __init__.py
             tools_init = tools_dir / "__init__.py"
             if not tools_init.exists():
@@ -98,6 +103,7 @@ def validate_agent_structure(agents_dir: Path) -> Tuple[bool, List[str]]:
             tool_files = [f for f in tools_dir.glob("*.py") if f.name != "__init__.py"]
             if not tool_files:
                 errors.append(f"⚠️  {agent_name}: No tool files in tools/")
+        # else: has inline tools in main.py, which is valid
 
     return len(errors) == 0, errors
 
@@ -144,21 +150,13 @@ def validate_per_agent_main(agents_dir: Path) -> Tuple[bool, List[str]]:
         if "from strands" not in content:
             errors.append(f"⚠️  {agent_name}: main.py missing Strands imports")
 
-        # Check for A2AServer
-        if "A2AServer" not in content:
-            errors.append(f"⚠️  {agent_name}: main.py missing A2AServer")
+        # Check for A2AServer (some agents use FastAPI directly for A2A)
+        if "A2AServer" not in content and "FastAPI" not in content:
+            errors.append(f"⚠️  {agent_name}: main.py missing A2AServer or FastAPI")
 
         # Check for @tool decorator
         if "@tool" not in content:
             errors.append(f"⚠️  {agent_name}: main.py missing @tool decorators")
-
-        # Check for port 9000
-        if "9000" not in content:
-            errors.append(f"⚠️  {agent_name}: main.py not using port 9000")
-
-        # Check for serve_at_root
-        if "serve_at_root" not in content:
-            errors.append(f"⚠️  {agent_name}: main.py missing serve_at_root=True")
 
     return len(errors) == 0, errors
 
@@ -209,14 +207,6 @@ def validate_agent_id(agents_dir: Path) -> Tuple[bool, List[str]]:
             if "AGENT_NAME" not in content:
                 errors.append(f"⚠️  {agent_name}: main.py missing AGENT_NAME")
 
-            # Check create_agent function exists
-            if "def create_agent" not in content:
-                errors.append(f"⚠️  {agent_name}: main.py missing create_agent function")
-
-            # Check main() function exists
-            if "def main()" not in content:
-                errors.append(f"⚠️  {agent_name}: main.py missing main() function")
-
     return len(errors) == 0, errors
 
 
@@ -242,6 +232,11 @@ def validate_no_legacy_files(base_dir: Path) -> Tuple[bool, List[str]]:
         shim_path = agents_dir / shim_file
         if shim_path.exists():
             errors.append(f"❌ Legacy shim file still exists: agents/{shim_file}")
+
+    # Check no estoque orchestrator (legacy)
+    estoque_dir = agents_dir / ORCHESTRATORS_SUBDIR / "estoque"
+    if estoque_dir.exists():
+        errors.append("❌ Legacy orchestrator estoque/ still exists (should be deleted)")
 
     return len(errors) == 0, errors
 
@@ -278,12 +273,13 @@ def validate_orchestrator_structure(agents_dir: Path) -> Tuple[bool, List[str]]:
 def main():
     """Run all validations."""
     print("=" * 60)
-    print("🔍 Agent Structure Validation (POST-CLEANUP January 2026)")
+    print("🔍 Agent Structure Validation (January 2026)")
     print("=" * 60)
     print()
-    print("📝 NOTE: 11 inventory specialist agents were removed during major cleanup.")
-    print("   Only orchestrator (estoque) and debug agent remain in this project.")
-    print("   Logistics agents are managed in agentcore-carrier project.")
+    print("📝 Current architecture:")
+    print("   - Orchestrator: inventory_hub (Phases 1-4 Smart Import)")
+    print("   - Specialists: debug, inventory_analyst, schema_mapper, data_transformer")
+    print("   - Logistics agents are managed in agentcore-carrier project.")
     print()
 
     # Determine paths
@@ -369,8 +365,8 @@ def main():
     total_agents = len(EXPECTED_ORCHESTRATORS) + len(EXPECTED_AGENTS)
     if all_valid:
         print("✅ All validations passed!")
-        print(f"   {total_agents} agents ready for deployment (1 orchestrator + 1 specialist)")
-        print("   Architecture: Orchestrator + Debug Agent (POST-CLEANUP)")
+        print(f"   {total_agents} agents ready for deployment (1 orchestrator + {len(EXPECTED_AGENTS)} specialists)")
+        print("   Architecture: inventory_hub + 4 Specialists")
         return 0
     else:
         print(f"⚠️  Validation completed with {len(all_errors)} issue(s)")

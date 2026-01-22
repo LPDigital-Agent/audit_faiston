@@ -17,6 +17,7 @@ from agents.specialists.inventory_analyst.main import (
     AGENT_DESCRIPTION,
     AGENT_ID,
     AGENT_NAME,
+    AGENT_PORT,
     AGENT_SKILLS,
     create_agent,
     main,
@@ -25,6 +26,7 @@ from agents.specialists.inventory_analyst.main import (
 __all__ = [
     "AGENT_ID",
     "AGENT_NAME",
+    "AGENT_PORT",
     "AGENT_DESCRIPTION",
     "AGENT_SKILLS",
     "create_agent",

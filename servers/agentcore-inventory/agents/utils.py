@@ -93,10 +93,11 @@ PRO_THINKING_AGENTS = {
     "import",           # Data import - needs Thinking for file structure
     "file_analyzer",    # FileAnalyzer A2A agent - needs Thinking for analysis
     "vision_analyzer",  # VisionAnalyzer A2A agent - needs Thinking for OCR
-    "file_analyst",     # FileAnalyst swarm agent - needs Thinking for NEXO imports
-    # Phase 2+3: Smart Import specialist agents (critical inventory per CLAUDE.md)
+    "file_analyst",     # FileAnalyst A2A agent - needs Thinking for NEXO imports
+    # Phase 2+3+4: Smart Import specialist agents (critical inventory per CLAUDE.md)
     "inventory_analyst",  # Phase 2 - File structure analysis
     "schema_mapper",      # Phase 3 - Semantic column mapping with learning
+    "data_transformer",   # Phase 4 - Cognitive ETL with error enrichment
     # Reasoning agents (always used Thinking)
     "learning",         # Memory extraction - NEEDS thinking for pattern recognition
     "schema_evolution", # Schema analysis - NEEDS thinking for SQL generation

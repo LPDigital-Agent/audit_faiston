@@ -1,0 +1,75 @@
+# =============================================================================
+# AgentCore Deployment Configuration - Data Transformer
+# =============================================================================
+# Phase 4: Data Transformation & Loading (The Cognitive Executor)
+#
+# Deploy command:
+#   cd server/agentcore-inventory/agents/specialists/data_transformer
+#   agentcore deploy --profile faiston-aio
+#
+# Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/api-reference/cli.html
+# =============================================================================
+
+# Runtime configuration
+runtime:
+  id: faiston_data_transformer
+  description: "Data Transformer - Intelligent ETL with Cognitive Error Handling (Phase 4)"
+
+  # Memory configuration (STM + LTM for preferences learning)
+  memory:
+    type: hybrid  # STM for session + LTM for user preferences
+    # LTM enables learning error handling preferences (STOP_ON_ERROR vs LOG_AND_CONTINUE)
+    # Preferences stored in /preferences/import/user namespace
+
+  # Network configuration
+  port: 9019
+
+  # Scaling (Background job processing needs stable instances)
+  scaling:
+    min_instances: 0
+    max_instances: 5  # Higher limit for concurrent imports
+
+  # Timeout settings (Long-running ETL jobs)
+  timeout:
+    invoke_timeout_seconds: 900  # 15 minutes for large file processing
+
+  # Health check
+  health_check:
+    path: /health
+    interval_seconds: 30
+
+# Environment variables
+environment:
+  # AWS Configuration
+  AWS_REGION: us-east-2
+  AWS_ACCOUNT_ID: "377311924364"
+
+  # S3 Bucket for documents and rejection reports
+  DOCUMENTS_BUCKET: faiston-one-sga-documents-prod
+
+  # MCP Gateway for batch insert
+  MCP_GATEWAY_ENABLED: "true"
+
+  # File size limits (per plan)
+  MAX_FILE_SIZE_MB: "100"
+  MAX_ROWS_ESTIMATE: "100000"
+
+  # Logging level
+  LOG_LEVEL: INFO
+
+# Agent metadata
+metadata:
+  name: DataTransformer
+  version: "2026-01-21"
+  phase: "4-data-transformation"
+  owner: "faiston-sga-team"
+  tags:
+    - inventory
+    - data-transformation
+    - etl
+    - mcp-gateway
+    - phase-4
+    - gemini-pro
+    - thinking-mode
+    - cognitive-middleware
+    - fire-and-forget

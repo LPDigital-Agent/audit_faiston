@@ -99,6 +99,8 @@ PROD_RUNTIME_IDS = {
     "inventory_analyst": "faiston_inventory_analyst-0uGg1W8ITM",
     # Phase 3: Schema Mapper - Semantic column mapping with MCP schema introspection
     "schema_mapper": "faiston_schema_mapper-7fxI9bFHzd",
+    # Phase 4: Data Transformer - Cognitive ETL with error enrichment
+    "data_transformer": "faiston_data_transformer-xjSXPo8HaC",
 }
 
 # Dev runtime IDs (only for agents that have dev deployments)
@@ -228,6 +230,14 @@ KNOWN_CAPABILITIES: Dict[str, Dict[str, Any]] = {
         "name": "SchemaMapper",
         "description": "Semantic column mapping with MCP schema introspection and learning",
         "skills": ["get_target_schema", "save_mapping_proposal", "health_check"],
+    },
+    "data_transformer": {
+        "name": "DataTransformer",
+        "description": "Cognitive ETL with error enrichment and Fire-and-Forget pattern",
+        "skills": [
+            "start_transformation", "get_job_status", "load_preferences",
+            "save_preferences", "check_notifications", "health_check"
+        ],
     },
 }
 
@@ -1448,9 +1458,10 @@ class LocalA2AClient(A2AClient):
         # BUG-025 FIX: New specialized agents
         "file_analyzer": "http://127.0.0.1:9015/",  # FileAnalyzer - Pydantic structured file analysis
         "vision_analyzer": "http://127.0.0.1:9016/",  # VisionAnalyzer - Vision document analysis
-        # Phase 2+3: Smart Import specialist agents
+        # Phase 2+3+4: Smart Import specialist agents
         "inventory_analyst": "http://127.0.0.1:9017/",  # InventoryAnalyst - File structure analysis
         "schema_mapper": "http://127.0.0.1:9018/",  # SchemaMapper - Semantic column mapping
+        "data_transformer": "http://127.0.0.1:9019/",  # DataTransformer - Cognitive ETL
     }
 
     def __init__(self, base_port: int = 9000):

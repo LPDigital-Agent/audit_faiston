@@ -1383,3 +1383,152 @@ class SGAPostgresClient:
                 "column_name": safe_column,
                 "column_type": safe_type,
             }
+
+    # =========================================================================
+    # Batch Insert Methods (Phase 4 - DataTransformer)
+    # =========================================================================
+
+    def insert_pending_items_batch(
+        self,
+        rows: List[Dict[str, Any]],
+        entry_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Insert multiple rows into pending_entry_items table in a single transaction.
+
+        Used by DataTransformer agent during Phase 4 ETL. session_id from agent
+        equals entry_id in database (FK to pending_entries).
+
+        CRITICAL: Uses parameterized queries for SQL injection prevention.
+        Column names are validated against actual schema before insertion.
+
+        Args:
+            rows: List of dicts with column names as keys. Each dict is one row.
+                  Supported columns:
+                  - line_number (int, required)
+                  - part_number (str)
+                  - description (str)
+                  - quantity (int, required)
+                  - unit_value (decimal)
+                  - total_value (decimal)
+                  - serial_numbers (list of str)
+                  - [dynamic columns from schema evolution]
+            entry_id: Parent pending_entries UUID (FK constraint enforced)
+
+        Returns:
+            {
+                "success": True/False,
+                "inserted_count": int,
+                "errors": [{"row_index": int, "error": str, "row_data": dict}]
+            }
+        """
+        if not rows:
+            return {"success": True, "inserted_count": 0, "errors": []}
+
+        conn = self._get_connection()
+        errors: List[Dict[str, Any]] = []
+        inserted_count = 0
+
+        try:
+            # Step 1: Validate entry_id exists in pending_entries
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT entry_id FROM sga.pending_entries WHERE entry_id = %s",
+                    (entry_id,)
+                )
+                if cur.fetchone() is None:
+                    return {
+                        "success": False,
+                        "inserted_count": 0,
+                        "errors": [{
+                            "row_index": -1,
+                            "error": f"entry_id '{entry_id}' does not exist in pending_entries",
+                            "row_data": None,
+                        }],
+                    }
+
+            # Step 2: Get valid columns from pending_entry_items schema
+            table_columns = self.get_table_columns("pending_entry_items", "sga")
+            valid_columns = {col["name"] for col in table_columns}
+
+            # Remove auto-generated columns that should not be inserted
+            auto_columns = {"entry_item_id", "created_at", "entry_id"}
+            insertable_columns = valid_columns - auto_columns
+
+            logger.info(
+                f"[BatchInsert] Valid columns for pending_entry_items: {insertable_columns}"
+            )
+
+            # Step 3: Process each row, filtering to valid columns only
+            with conn.cursor() as cur:
+                for row_idx, row in enumerate(rows):
+                    try:
+                        # Filter row to only valid, insertable columns
+                        filtered_row = {
+                            k: v for k, v in row.items()
+                            if k in insertable_columns and v is not None
+                        }
+
+                        if not filtered_row:
+                            errors.append({
+                                "row_index": row_idx,
+                                "error": "No valid columns after filtering",
+                                "row_data": row,
+                            })
+                            continue
+
+                        # Build INSERT statement with parameterized values
+                        columns = list(filtered_row.keys())
+                        placeholders = ["%s"] * (len(columns) + 1)  # +1 for entry_id
+                        values = [entry_id] + [filtered_row[c] for c in columns]
+
+                        # Double-quote column names to preserve case
+                        quoted_columns = ", ".join(
+                            ['"entry_id"'] + [f'"{c}"' for c in columns]
+                        )
+
+                        insert_sql = f"""
+                            INSERT INTO sga.pending_entry_items ({quoted_columns})
+                            VALUES ({", ".join(placeholders)})
+                        """
+
+                        cur.execute(insert_sql, tuple(values))
+                        inserted_count += 1
+
+                    except Exception as row_error:
+                        errors.append({
+                            "row_index": row_idx,
+                            "error": str(row_error),
+                            "row_data": row,
+                        })
+                        # Continue with next row - partial insert allowed
+
+                # Commit all successful inserts
+                conn.commit()
+
+            logger.info(
+                f"[BatchInsert] Completed: {inserted_count} inserted, "
+                f"{len(errors)} errors for entry_id={entry_id}"
+            )
+
+            return {
+                "success": inserted_count > 0 or len(errors) == 0,
+                "inserted_count": inserted_count,
+                "errors": errors,
+            }
+
+        except Exception as e:
+            conn.rollback()
+            debug_error(
+                e, "postgres_insert_pending_items_batch",
+                {"entry_id": entry_id, "row_count": len(rows)}
+            )
+            return {
+                "success": False,
+                "inserted_count": 0,
+                "errors": [{
+                    "row_index": -1,
+                    "error": str(e),
+                    "row_data": None,
+                }],
+            }

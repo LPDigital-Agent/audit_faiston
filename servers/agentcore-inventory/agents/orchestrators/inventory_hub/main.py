@@ -1,5 +1,5 @@
 # =============================================================================
-# Inventory Hub Orchestrator - Phase 1+2+3: File Ingestion, Analysis & Mapping
+# Inventory Hub Orchestrator - Phase 1+2+3+4: Full Smart Import Flow
 # =============================================================================
 # Central intelligence for SGA inventory file ingestion.
 #
@@ -21,6 +21,10 @@
 #   6. Map columns to schema via A2A (SchemaMapper specialist)
 #   7. Handle HIL confirmation and learning workflows
 #   8. Save training examples for future imports
+# Phase 4:
+#   9. Transform and load data via A2A (DataTransformer specialist)
+#  10. Fire-and-Forget background processing with job tracking
+#  11. Check job status and pending notifications
 #
 # RESPONSE LANGUAGE:
 # - System prompt: English (as per CLAUDE.md)
@@ -29,8 +33,9 @@
 # MEMORY:
 # - STM (Short-Term Memory) for tracking upload session context
 # - LTM integration via SchemaMapper for cross-import learning
+# - Job notifications via AgentCore Memory (Fire-and-Forget UX)
 #
-# VERSION: 2026-01-21T21:00:00Z (Phase 3 update)
+# VERSION: 2026-01-21T22:00:00Z (Phase 4 update)
 # =============================================================================
 
 import json
@@ -110,6 +115,16 @@ Your primary role is to help users upload inventory files securely.
 
 6. **Save Training Example** (Phase 3): Use `save_training_example` when the user
    provides manual corrections. This teaches the system for future imports.
+
+7. **Transform and Import** (Phase 4): Use `transform_import` to start background
+   data transformation after mapping is confirmed. Returns immediately with job_id
+   (Fire-and-Forget pattern). The DataTransformer handles errors intelligently.
+
+8. **Check Import Status** (Phase 4): Use `check_import_status` when user asks about
+   progress. Shows rows processed, inserted, and rejected.
+
+9. **Check Notifications** (Phase 4): Use `check_notifications` at the start of
+   conversations to see if any background jobs completed. Present results naturally.
 
 ## Supported File Types
 
@@ -290,6 +305,50 @@ User: "É a coluna SKU"
 Assistant: "Ótimo! Aprendi que 'SKU' mapeia para 'part_number'. Deixa eu refazer o mapeamento..."
 [Call map_to_schema again - now with learned pattern]
 [Present complete mapping for confirmation]
+
+### Phase 4: Data Transformation (Fire-and-Forget)
+After the user confirms mapping (confirm_mapping with approved=True):
+1. Call `transform_import(s3_key, mappings_json, session_id, user_id)`
+2. Receive job_id immediately (Fire-and-Forget pattern)
+3. Tell user: "Iniciei o processamento em background. Te aviso assim que terminar."
+4. The DataTransformer processes in background and saves notification to Memory
+5. On next user message, call `check_notifications(user_id)` to see if jobs completed
+6. If notifications found, report: "Aliás, sua importação terminou! [details]"
+
+**Handling Import Status Questions:**
+- If user asks "Como está a importação?" or "Já terminou?" → call `check_import_status(job_id)`
+- Present progress in pt-BR with rows processed, inserted, rejected
+
+**Handling Completed Jobs:**
+- If status is "completed": "Importação finalizada com sucesso! X itens inseridos."
+- If status is "partial": "Importação finalizada. X itens inseridos, Y rejeitados. [link para relatório]"
+- If status is "failed": Present the error with human-readable explanation from DebugAgent
+
+### Example: Full Import Flow with Transformation
+[After confirm_mapping(approved=True)]
+[Call transform_import(s3_key, mappings, session_id, user_id)]
+Assistant: "Mapeamento confirmado! Iniciei o processamento do arquivo em background.
+Te aviso assim que terminar. Você pode continuar trabalhando enquanto isso."
+
+[User sends any message later]
+[Call check_notifications(user_id)]
+[Notification found: job completed with 1480 inserted, 20 rejected]
+Assistant: "Aliás, sua importação terminou!
+- **Itens importados:** 1.480
+- **Itens rejeitados:** 20
+
+Você pode baixar o relatório de erros para ver como corrigir os itens rejeitados.
+Quer que eu te ajude a entender os erros?"
+
+### Example: User Asks About Progress
+User: "Como está minha importação?"
+[Call check_import_status(job_id)]
+[Status: processing, 750/1500 rows]
+Assistant: "Sua importação está em andamento!
+- **Progresso:** 50% (750 de 1.500 linhas)
+- **Status:** Processando
+
+Vou te avisar quando terminar."
 """
 
 
@@ -315,7 +374,7 @@ def health_check() -> str:
         "agent_name": AGENT_NAME,
         "version": AGENT_VERSION,
         "runtime_id": RUNTIME_ID,
-        "architecture": "phase3-semantic-mapping",
+        "architecture": "phase4-full-smart-import",
         "capabilities": [
             "generate_upload_url",
             "verify_file_availability",
@@ -323,10 +382,13 @@ def health_check() -> str:
             "map_to_schema",           # Phase 3
             "confirm_mapping",         # Phase 3: HIL
             "save_training_example",   # Phase 3: Learning
+            "transform_import",        # Phase 4: Fire-and-Forget ETL
+            "check_import_status",     # Phase 4: Job status
+            "check_notifications",     # Phase 4: Job completion
         ],
         "supported_file_types": list(ALLOWED_FILE_TYPES.keys()),
         "max_file_size_mb": 100,
-        "memory_type": "stm+ltm",  # Phase 3 adds LTM via SchemaMapper
+        "memory_type": "stm+ltm+notifications",  # Phase 4 adds notifications
     })
 
 
@@ -668,6 +730,186 @@ def save_training_example(
 
 
 # =============================================================================
+# Phase 4: DataTransformer Integration (Fire-and-Forget)
+# =============================================================================
+
+
+@tool
+def transform_import(
+    s3_key: str,
+    mappings_json: str,
+    session_id: str,
+    user_id: str,
+) -> str:
+    """
+    Trigger DataTransformer agent for background processing (Fire-and-Forget).
+
+    After HIL confirmation of mappings (confirm_mapping with approved=True),
+    this tool starts the actual data transformation and loading process.
+    The DataTransformer works in background - returns job_id immediately.
+
+    Args:
+        s3_key: S3 key of the uploaded file to transform.
+        mappings_json: JSON string of confirmed column mappings from SchemaMapper.
+        session_id: Import session identifier.
+        user_id: User who initiated the import.
+
+    Returns:
+        JSON string with job_id and status="started" (Fire-and-Forget).
+        Example:
+        {
+            "success": true,
+            "job_id": "job-abc123",
+            "status": "started",
+            "human_message": "Processamento iniciado em background..."
+        }
+    """
+    import asyncio
+
+    async def _invoke_transformer() -> dict:
+        """Async wrapper for A2A call."""
+        a2a_client = A2AClient()
+        return await a2a_client.invoke_agent("data_transformer", {
+            "action": "start_transformation",
+            "s3_key": s3_key,
+            "mappings": mappings_json,
+            "session_id": session_id,
+            "user_id": user_id,
+            "fire_and_forget": True,  # Signal to return job_id immediately
+        })
+
+    try:
+        logger.info(
+            f"[InventoryHub] Starting transformation for session {session_id}, "
+            f"s3_key={s3_key}, user={user_id}"
+        )
+
+        result = asyncio.run(_invoke_transformer())
+
+        if result.get("success"):
+            logger.info(
+                f"[InventoryHub] Transformation started: job_id={result.get('job_id')}"
+            )
+            return json.dumps({
+                "success": True,
+                "job_id": result.get("job_id"),
+                "status": "started",
+                "human_message": (
+                    "Iniciei o processamento do seu arquivo em background. "
+                    "Te aviso assim que terminar!"
+                ),
+            })
+        else:
+            return json.dumps({
+                "success": False,
+                "error": result.get("error", "DataTransformer unavailable"),
+                "human_message": (
+                    "Não consegui iniciar o processamento. "
+                    "Por favor, tente novamente em alguns minutos."
+                ),
+            })
+
+    except Exception as e:
+        debug_error(e, "transform_import", {
+            "s3_key": s3_key,
+            "session_id": session_id,
+        })
+        return json.dumps({
+            "success": False,
+            "error": f"Failed to start transformation: {str(e)}",
+            "error_type": "A2A_ERROR",
+        })
+
+
+@tool
+def check_import_status(job_id: str) -> str:
+    """
+    Check status of a background transformation job.
+
+    Use this when the user asks about import progress, e.g.,
+    "Como está a importação?" or "Já terminou?"
+
+    Args:
+        job_id: Job identifier from transform_import response.
+
+    Returns:
+        JSON string with current job status and progress.
+    """
+    import asyncio
+
+    async def _check_status() -> dict:
+        """Async wrapper for A2A call."""
+        a2a_client = A2AClient()
+        return await a2a_client.invoke_agent("data_transformer", {
+            "action": "get_job_status",
+            "job_id": job_id,
+        })
+
+    try:
+        result = asyncio.run(_check_status())
+        return json.dumps(result)
+
+    except Exception as e:
+        debug_error(e, "check_import_status", {"job_id": job_id})
+        return json.dumps({
+            "success": False,
+            "error": f"Failed to check status: {str(e)}",
+            "error_type": "A2A_ERROR",
+        })
+
+
+@tool
+def check_notifications(user_id: str) -> str:
+    """
+    Check for pending job completion notifications.
+
+    Called at the start of each conversation turn to see if any
+    background jobs have completed since the last message.
+    Part of the Fire-and-Forget UX - notifications appear naturally
+    in the conversation flow.
+
+    Args:
+        user_id: User to check notifications for.
+
+    Returns:
+        JSON string with list of pending notifications.
+        Example:
+        {
+            "has_notifications": true,
+            "notifications": [{
+                "job_id": "job-abc123",
+                "status": "completed",
+                "rows_inserted": 1480,
+                "rows_rejected": 20,
+                "human_message": "Importação finalizada! 1480 itens inseridos."
+            }]
+        }
+    """
+    import asyncio
+
+    async def _check() -> dict:
+        """Async wrapper for A2A call."""
+        a2a_client = A2AClient()
+        return await a2a_client.invoke_agent("data_transformer", {
+            "action": "check_notifications",
+            "user_id": user_id,
+        })
+
+    try:
+        result = asyncio.run(_check())
+        return json.dumps(result)
+
+    except Exception as e:
+        debug_error(e, "check_notifications", {"user_id": user_id})
+        return json.dumps({
+            "success": False,
+            "has_notifications": False,
+            "notifications": [],
+            "error": str(e),
+        })
+
+
+# =============================================================================
 # Orchestrator Factory
 # =============================================================================
 
@@ -705,6 +947,10 @@ def create_inventory_hub() -> Agent:
             map_to_schema,
             confirm_mapping,
             save_training_example,
+            # Phase 4: Data transformation (Fire-and-Forget)
+            transform_import,
+            check_import_status,
+            check_notifications,
             # System
             health_check,
         ],

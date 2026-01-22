@@ -70,6 +70,15 @@ class MappingStatus(str, Enum):
     ERROR = "error"              # Mapping failed
 
 
+class TransformationStatus(str, Enum):
+    """Status of data transformation job (Phase 4)."""
+    STARTED = "started"          # Job accepted, processing in background
+    PROCESSING = "processing"    # Actively transforming rows
+    COMPLETED = "completed"      # All rows processed successfully
+    FAILED = "failed"            # Job failed (check error)
+    PARTIAL = "partial"          # Some rows failed (rejection report available)
+
+
 # =============================================================================
 # Base Response Schema (ALL agents MUST extend this)
 # =============================================================================
@@ -188,6 +197,75 @@ class MissingRequiredField(BaseModel):
     available_sources: List[str] = Field(
         default_factory=list,
         description="File columns that could potentially match"
+    )
+
+
+# =============================================================================
+# DataTransformer Sub-Models (Phase 4)
+# =============================================================================
+
+
+class RejectionReason(BaseModel):
+    """
+    Enriched rejection with DebugAgent diagnosis.
+
+    Part of the Nexo Immune System: every rejected row includes
+    human-readable explanation and suggested fix from DebugAgent.
+    """
+    row_number: int = Field(
+        description="Row number in source file (1-indexed)"
+    )
+    column: str = Field(
+        description="Column where the error occurred"
+    )
+    original_value: str = Field(
+        description="Original value that caused the rejection"
+    )
+    error_type: str = Field(
+        description="Error classification (e.g., DateParseError, NumberParseError)"
+    )
+    human_explanation: str = Field(
+        description="DebugAgent-enriched explanation in pt-BR"
+    )
+    suggested_fix: str = Field(
+        description="Actionable fix suggestion in pt-BR"
+    )
+
+
+class JobNotification(BaseModel):
+    """
+    Notification for completed background job.
+
+    Stored in AgentCore Memory for retrieval on next user message.
+    Part of Fire-and-Forget pattern - natural conversation UX.
+    """
+    job_id: str = Field(
+        description="Unique job identifier"
+    )
+    job_type: str = Field(
+        default="transformation",
+        description="Type of background job"
+    )
+    status: TransformationStatus = Field(
+        description="Final job status"
+    )
+    rows_inserted: int = Field(
+        default=0,
+        description="Number of successfully inserted rows"
+    )
+    rows_rejected: int = Field(
+        default=0,
+        description="Number of rejected rows"
+    )
+    rejection_report_url: Optional[str] = Field(
+        default=None,
+        description="S3 presigned URL for rejection report download"
+    )
+    human_message: str = Field(
+        description="User-friendly completion message in pt-BR"
+    )
+    created_at: str = Field(
+        description="ISO-8601 timestamp when job completed"
     )
 
 
@@ -489,6 +567,91 @@ class SchemaMappingResponse(AgentResponseBase):
     )
 
 
+class TransformationResult(AgentResponseBase):
+    """
+    Response from DataTransformer agent (Phase 4).
+
+    Supports Fire-and-Forget pattern:
+    - STARTED: Job accepted, processing in background (immediate return)
+    - PROCESSING: Mid-execution status check
+    - COMPLETED/PARTIAL/FAILED: Final status with full details
+
+    Part of Nexo Immune System: all errors enriched by DebugAgent.
+    """
+    # Job tracking
+    job_id: str = Field(
+        description="Unique job identifier for status tracking"
+    )
+    session_id: str = Field(
+        default="",
+        description="Import session this job belongs to"
+    )
+    status: TransformationStatus = Field(
+        default=TransformationStatus.STARTED,
+        description="Current job status"
+    )
+
+    # Progress metrics
+    rows_total: int = Field(
+        default=0,
+        description="Total rows in source file"
+    )
+    rows_processed: int = Field(
+        default=0,
+        description="Rows processed so far"
+    )
+    rows_inserted: int = Field(
+        default=0,
+        description="Rows successfully inserted to pending_entry_items"
+    )
+    rows_rejected: int = Field(
+        default=0,
+        description="Rows that failed transformation/validation"
+    )
+
+    # Strategy used (from Memory preferences)
+    strategy_used: str = Field(
+        default="LOG_AND_CONTINUE",
+        description="Error handling strategy: STOP_ON_ERROR or LOG_AND_CONTINUE"
+    )
+    strategy_source: str = Field(
+        default="system_default",
+        description="Where strategy came from: memory, user_explicit, system_default"
+    )
+
+    # Rejection report (when status is PARTIAL or FAILED)
+    rejection_report_url: Optional[str] = Field(
+        default=None,
+        description="S3 presigned URL for detailed rejection report download"
+    )
+    rejection_summary: List[RejectionReason] = Field(
+        default_factory=list,
+        description="First 10 rejections with DebugAgent enrichment (preview)"
+    )
+
+    # User-facing message
+    human_message: str = Field(
+        default="",
+        description="User-friendly status message in pt-BR"
+    )
+
+    # Timing
+    started_at: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 timestamp when job started"
+    )
+    completed_at: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 timestamp when job completed"
+    )
+
+    # Debug enrichment (if FAILED or PARTIAL)
+    debug_analysis: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="DebugAgent analysis for pattern detection across rejections"
+    )
+
+
 # =============================================================================
 # Orchestrator Responses
 # =============================================================================
@@ -737,6 +900,7 @@ __all__ = [
     "OperationType",
     "ImportStage",
     "MappingStatus",  # Phase 3
+    "TransformationStatus",  # Phase 4
     # Base
     "AgentResponseBase",
     # Debug sub-models
@@ -746,6 +910,9 @@ __all__ = [
     # Schema Mapper sub-models (Phase 3)
     "ColumnMapping",
     "MissingRequiredField",
+    # DataTransformer sub-models (Phase 4)
+    "RejectionReason",
+    "JobNotification",
     # Specialist responses
     "ValidationResponse",
     "EnrichmentResponse",
@@ -759,6 +926,7 @@ __all__ = [
     "EstoqueControlResponse",
     "DataImportResponse",
     "SchemaMappingResponse",  # Phase 3
+    "TransformationResult",  # Phase 4
     # Orchestrator responses
     "OrchestratorResponse",
     "NexoImportResponse",

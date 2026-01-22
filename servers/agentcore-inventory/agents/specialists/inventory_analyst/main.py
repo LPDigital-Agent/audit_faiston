@@ -27,7 +27,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from strands import Agent, tool
-from strands.agent.hooks import DebugHook, LoggingHook, MetricsHook
+from shared.hooks import DebugHook, LoggingHook, MetricsHook
 from strands.multiagent.a2a import A2AServer
 from a2a.types import AgentSkill
 
