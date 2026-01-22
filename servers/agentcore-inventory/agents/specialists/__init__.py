@@ -1,7 +1,7 @@
 """
 Faiston SGA Specialist Agents - Smart Import Architecture
 
-Phase 2+3+4 agents for the NEXO Smart Import flow:
+Phase 2+3+4+5 agents for the NEXO Smart Import flow:
 
 Phase 2 - InventoryAnalyst:
 - Analyzes file structure without loading full content
@@ -18,52 +18,36 @@ Phase 4 - DataTransformer:
 - Fire-and-Forget background processing
 - Port: 9019
 
+Phase 5 - ObservationAgent:
+- Proactive insights specialist (Nexo's Intuition)
+- Pattern detection and health monitoring
+- Port: 9012
+
 Debug Agent:
 - Error analysis and debugging support
 - Port: 9014
 
-NOTE: carrier, expedition, reverse, reconciliacao agents belong to agentcore-carrier project.
+NOTE: Carrier, expedition, reverse, reconciliacao agents belong to agentcore-carrier project.
+
+IMPORTANT: This file uses LAZY IMPORTS to avoid cascading dependency issues.
+Each specialist agent should be imported directly from its subpackage:
+    from agents.specialists.observation.main import ...
+    from agents.specialists.debug.main import ...
 """
 
-# Phase 2: Inventory Analyst
-from .inventory_analyst import (
-    AGENT_ID as INVENTORY_ANALYST_ID,
-    AGENT_PORT as INVENTORY_ANALYST_PORT,
-    create_agent as create_inventory_analyst,
-)
-
-# Phase 3: Schema Mapper
-from .schema_mapper import (
-    AGENT_ID as SCHEMA_MAPPER_ID,
-    AGENT_PORT as SCHEMA_MAPPER_PORT,
-    create_agent as create_schema_mapper,
-)
-
-# Phase 4: Data Transformer
-from .data_transformer import (
-    AGENT_ID as DATA_TRANSFORMER_ID,
-    AGENT_PORT as DATA_TRANSFORMER_PORT,
-    create_agent as create_data_transformer,
-)
-
-# Debug Agent
-from .debug import (
-    AGENT_ID as DEBUG_AGENT_ID,
-)
+# LAZY IMPORTS: Do NOT import all specialists here to avoid cascading dependencies.
+# Each agent is deployed independently and may have different dependency sets.
+# Import specialists directly from their subpackages when needed.
 
 __all__ = [
     # Phase 2
-    "INVENTORY_ANALYST_ID",
-    "INVENTORY_ANALYST_PORT",
-    "create_inventory_analyst",
+    "inventory_analyst",
     # Phase 3
-    "SCHEMA_MAPPER_ID",
-    "SCHEMA_MAPPER_PORT",
-    "create_schema_mapper",
+    "schema_mapper",
     # Phase 4
-    "DATA_TRANSFORMER_ID",
-    "DATA_TRANSFORMER_PORT",
-    "create_data_transformer",
+    "data_transformer",
+    # Phase 5
+    "observation",
     # Debug
-    "DEBUG_AGENT_ID",
+    "debug",
 ]
