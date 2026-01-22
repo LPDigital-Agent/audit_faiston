@@ -21,6 +21,7 @@ import logging
 import os
 
 from shared.debug_utils import debug_error
+from shared.env_config import get_required_env
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +94,8 @@ def _get_s3_client():
 
 
 def _get_bucket_name() -> str:
-    """Get documents bucket name from environment."""
-    return os.environ.get("DOCUMENTS_BUCKET", "faiston-one-sga-documents-prod")
+    """Get documents bucket name from environment (FAIL-CLOSED)."""
+    return get_required_env("DOCUMENTS_BUCKET", "S3 document storage")
 
 
 # =============================================================================
@@ -853,9 +854,6 @@ class EquipmentDocsS3Client:
         )
     """
 
-    # Default bucket for equipment documentation
-    DEFAULT_BUCKET = "faiston-one-sga-equipment-docs-prod"
-
     def __init__(self, bucket_name: Optional[str] = None):
         """
         Initialize the equipment docs client.
@@ -863,9 +861,9 @@ class EquipmentDocsS3Client:
         Args:
             bucket_name: Override bucket name (for testing)
         """
-        self._bucket = bucket_name or os.environ.get(
-            "EQUIPMENT_DOCS_BUCKET",
-            self.DEFAULT_BUCKET
+        # FAIL-CLOSED: no production fallbacks
+        self._bucket = bucket_name or get_required_env(
+            "EQUIPMENT_DOCS_BUCKET", "equipment documentation storage"
         )
 
     @property

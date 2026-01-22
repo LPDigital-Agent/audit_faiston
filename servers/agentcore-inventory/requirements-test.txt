@@ -17,3 +17,8 @@ mypy>=1.7.0
 # Test utilities
 freezegun>=1.4.0  # Mock datetime
 faker>=20.0.0     # Generate test data
+
+# Security analysis tools (MANDATORY for audit-static target)
+bandit>=1.7.5     # SAST for Python
+safety>=2.3.0     # Dependency vulnerability scanner
+pip-audit>=2.6.0  # Audit pip packages for CVEs

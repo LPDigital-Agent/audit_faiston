@@ -19,6 +19,7 @@ import logging
 import os
 
 from shared.debug_utils import debug_error
+from shared.env_config import get_required_env
 
 logger = logging.getLogger(__name__)
 
@@ -62,23 +63,23 @@ def _get_dynamodb_client():
 # =============================================================================
 
 def _get_inventory_table() -> str:
-    """Get inventory table name from environment."""
-    return os.environ.get("INVENTORY_TABLE", "faiston-one-sga-inventory-prod")
+    """Get inventory table name from environment (FAIL-CLOSED)."""
+    return get_required_env("INVENTORY_TABLE", "DynamoDB inventory access")
 
 
 def _get_hil_table() -> str:
-    """Get HIL tasks table name from environment."""
-    return os.environ.get("HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod")
+    """Get HIL tasks table name from environment (FAIL-CLOSED)."""
+    return get_required_env("HIL_TASKS_TABLE", "DynamoDB HIL tasks")
 
 
 def _get_audit_table() -> str:
-    """Get audit log table name from environment."""
-    return os.environ.get("AUDIT_LOG_TABLE", "faiston-one-sga-audit-log-prod")
+    """Get audit log table name from environment (FAIL-CLOSED)."""
+    return get_required_env("AUDIT_LOG_TABLE", "DynamoDB audit log")
 
 
 def _get_sessions_table() -> str:
-    """Get sessions table name from environment."""
-    return os.environ.get("SESSIONS_TABLE", "faiston-one-sga-sessions-prod")
+    """Get sessions table name from environment (FAIL-CLOSED)."""
+    return get_required_env("SESSIONS_TABLE", "DynamoDB sessions")
 
 
 # =============================================================================

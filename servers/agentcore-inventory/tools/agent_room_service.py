@@ -28,6 +28,7 @@ from tools.humanizer import (
     get_status_label,
     humanize_audit_entry,
 )
+from shared.env_config import get_required_env
 
 logger = logging.getLogger(__name__)
 
@@ -471,7 +472,7 @@ def get_agent_room_data(user_id: str, session_id: Optional[str] = None) -> Dict:
 # =============================================================================
 
 def _get_audit_table() -> str:
-    """Get audit table name from environment."""
+    """Get audit table name from environment (FAIL-CLOSED)."""
     # MUST match dynamodb_client.py:_get_audit_table() to read from same table
     # where SGAAuditLogger writes events
-    return os.environ.get("AUDIT_LOG_TABLE", "faiston-one-sga-audit-log-prod")
+    return get_required_env("AUDIT_LOG_TABLE", "agent room audit log")

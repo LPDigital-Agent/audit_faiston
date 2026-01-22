@@ -28,6 +28,9 @@ from google.genai import types as genai_types
 # A2A Protocol Types for Agent Card Discovery (100% A2A Architecture)
 from a2a.types import AgentSkill
 
+# FAIL-CLOSED environment configuration (no production fallbacks)
+from shared.env_config import get_required_env
+
 # =============================================================================
 # Constants
 # =============================================================================
@@ -413,11 +416,11 @@ def create_agent_skill(
     )
 
 
-# Environment variables
-INVENTORY_TABLE = os.environ.get("INVENTORY_TABLE", "faiston-one-sga-inventory-prod")
-HIL_TASKS_TABLE = os.environ.get("HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod")
-AUDIT_LOG_TABLE = os.environ.get("AUDIT_LOG_TABLE", "faiston-one-sga-audit-log-prod")
-DOCUMENTS_BUCKET = os.environ.get("DOCUMENTS_BUCKET", "faiston-one-sga-documents-prod")
+# Environment variables (FAIL-CLOSED: no production fallbacks)
+INVENTORY_TABLE = get_required_env("INVENTORY_TABLE", "inventory data access")
+HIL_TASKS_TABLE = get_required_env("HIL_TASKS_TABLE", "HIL task management")
+AUDIT_LOG_TABLE = get_required_env("AUDIT_LOG_TABLE", "audit logging")
+DOCUMENTS_BUCKET = get_required_env("DOCUMENTS_BUCKET", "document storage")
 
 # =============================================================================
 # Entity Prefixes (Single-Table Design)

@@ -27,11 +27,12 @@ from typing import Optional
 
 from strands import tool
 
-# Import S3 client from tools package
-from tools.s3_client import SGAS3Client, S3ClientError
-
 # Shared utilities
 from shared.debug_utils import debug_error
+
+# NOTE: S3 client imported lazily inside functions to avoid package name collision
+# between top-level tools/ and agents/tools/ during module initialization.
+# See: Python sys.modules pollution when agents.tools is imported.
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,9 @@ def request_file_upload_url(
             "suggestion": "Please convert your file to CSV or Excel format"
         }
     """
+    # Lazy import to avoid package name collision during module initialization
+    from tools.s3_client import SGAS3Client, S3ClientError
+
     try:
         # Extract file extension
         if "." not in filename:
@@ -251,6 +255,9 @@ def verify_file_availability(s3_key: str) -> str:
             "allowed_types": ["csv", "xlsx", "xls", "pdf", "xml", "jpg", "jpeg", "png", "txt"]
         }
     """
+    # Lazy import to avoid package name collision during module initialization
+    from tools.s3_client import SGAS3Client, S3ClientError
+
     try:
         # Initialize S3 client
         s3_client = SGAS3Client()

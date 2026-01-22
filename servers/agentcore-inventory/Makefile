@@ -2,7 +2,7 @@
 # Makefile for AgentCore Inventory Service
 # =============================================================================
 
-.PHONY: help test test-cov test-unit test-integration test-verbose install-test clean
+.PHONY: help test test-cov test-unit test-integration test-verbose install-test audit-static clean
 
 # Default target
 help:
@@ -50,6 +50,13 @@ test-file:
 # Run specific test
 test-case:
 	@python3 -m pytest -k "$(CASE)" -v
+
+# Static security analysis
+audit-static:
+	@echo "Running static security analysis..."
+	@bandit -r . -c pyproject.toml
+	@safety check
+	@echo "Static analysis complete!"
 
 # Clean test artifacts
 clean:

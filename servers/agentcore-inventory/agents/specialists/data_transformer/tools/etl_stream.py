@@ -28,6 +28,8 @@ import boto3
 import pandas as pd
 from strands import tool
 
+from shared.env_config import get_required_env
+
 # Cognitive error handling (Nexo Immune System)
 from shared.cognitive_error_handler import enrich_batch_errors
 
@@ -38,11 +40,8 @@ MAX_FILE_SIZE_MB = int(os.environ.get("MAX_FILE_SIZE_MB", "100"))
 MAX_ROWS_ESTIMATE = int(os.environ.get("MAX_ROWS_ESTIMATE", "100000"))
 CHUNK_SIZE = 500  # Rows per chunk for streaming
 
-# S3 configuration
-DOCUMENTS_BUCKET = os.environ.get(
-    "DOCUMENTS_BUCKET",
-    "faiston-one-sga-documents-prod"
-)
+# S3 configuration (FAIL-CLOSED: no production fallbacks)
+DOCUMENTS_BUCKET = get_required_env("DOCUMENTS_BUCKET", "ETL stream S3 access")
 
 
 def _get_s3_client():

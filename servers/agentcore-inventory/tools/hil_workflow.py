@@ -17,6 +17,8 @@ from datetime import datetime
 import logging
 import os
 
+from shared.env_config import get_required_env
+
 logger = logging.getLogger(__name__)
 
 # Lazy imports - DynamoDB client imported only when needed
@@ -187,9 +189,7 @@ class HILWorkflowManager:
         }
 
         # Save to HIL tasks table
-        self.db.put_item(task_item, table_name=os.environ.get(
-            "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-        ))
+        self.db.put_item(task_item, table_name=get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks"))
 
         # Log to audit
         from tools.dynamodb_client import SGAAuditLogger
@@ -256,9 +256,7 @@ class HILWorkflowManager:
         return self.db.get_item(
             pk=f"{EntityPrefix.TASK}{task_id}",
             sk="METADATA",
-            table_name=os.environ.get(
-                "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-            ),
+            table_name=get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks"),
         )
 
     def get_pending_tasks(
@@ -280,9 +278,7 @@ class HILWorkflowManager:
         Returns:
             List of pending tasks
         """
-        table_name = os.environ.get(
-            "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-        )
+        table_name = get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks")
 
         # Query by status (GSI2)
         tasks = self.db.query_gsi(
@@ -325,9 +321,7 @@ class HILWorkflowManager:
         Returns:
             List of related tasks
         """
-        table_name = os.environ.get(
-            "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-        )
+        table_name = get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks")
 
         return self.db.query_gsi(
             index_name="GSI4",
@@ -384,9 +378,7 @@ class HILWorkflowManager:
         new_status = HILTaskStatus.MODIFIED if modified_payload else HILTaskStatus.APPROVED
 
         # Update task status
-        table_name = os.environ.get(
-            "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-        )
+        table_name = get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks")
 
         updates = {
             "status": new_status,
@@ -478,9 +470,7 @@ class HILWorkflowManager:
             }
 
         now = now_iso()
-        table_name = os.environ.get(
-            "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-        )
+        table_name = get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks")
 
         # Update task status
         self.db.update_item(
@@ -556,9 +546,7 @@ class HILWorkflowManager:
             }
 
         now = now_iso()
-        table_name = os.environ.get(
-            "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-        )
+        table_name = get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks")
 
         # Update task with escalation
         self.db.update_item(
@@ -909,9 +897,7 @@ class HILWorkflowManager:
         Returns:
             Statistics about task states and processing
         """
-        table_name = os.environ.get(
-            "HIL_TASKS_TABLE", "faiston-one-sga-hil-tasks-prod"
-        )
+        table_name = get_required_env("HIL_TASKS_TABLE", "HIL workflow tasks")
 
         # Count by status
         pending = len(self.db.query_gsi(

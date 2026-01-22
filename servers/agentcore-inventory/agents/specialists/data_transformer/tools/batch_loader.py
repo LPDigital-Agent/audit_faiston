@@ -24,6 +24,9 @@ from strands import tool
 # MCP Gateway client (uses IAM SigV4 auth per AWS best practices)
 from tools.mcp_gateway_client import MCPGatewayClient, MCPGatewayClientFactory
 
+# FAIL-CLOSED environment configuration (no production fallbacks)
+from shared.env_config import get_required_env
+
 logger = logging.getLogger(__name__)
 
 # Batch configuration
@@ -305,9 +308,9 @@ def generate_rejection_report(
                 ),
             })
 
-        # Upload to S3
+        # Upload to S3 (FAIL-CLOSED: no production fallbacks)
         report_key = f"rejection-reports/{session_id}/{job_id}-report.json"
-        bucket = os.environ.get("DOCUMENTS_BUCKET", "faiston-one-sga-documents-prod")
+        bucket = get_required_env("DOCUMENTS_BUCKET", "rejection report upload")
 
         try:
             session = boto3.Session(profile_name="faiston-aio")

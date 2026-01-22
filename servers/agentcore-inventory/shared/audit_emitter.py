@@ -24,6 +24,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 import os
 
+from shared.env_config import get_required_env
+
 
 def _convert_floats_to_decimal(obj: Any) -> Any:
     """
@@ -120,10 +122,7 @@ class AgentAuditEmitter:
             agent_id: Technical agent identifier (e.g., "learning", "nexo_import")
         """
         self.agent_id = agent_id
-        self._table_name = os.environ.get(
-            "AUDIT_LOG_TABLE",
-            "faiston-one-sga-audit-log-prod"
-        )
+        self._table_name = get_required_env("AUDIT_LOG_TABLE", "audit event emission")
         self._dynamodb = None
 
     @property

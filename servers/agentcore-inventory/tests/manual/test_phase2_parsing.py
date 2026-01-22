@@ -550,13 +550,52 @@ def test_get_file_structure_tool(inspector: FileInspector, bucket: str, s3_clien
         if not result.get("success"):
             return False, f"Tool returned error: {result.get('error')}"
 
-        # Verify expected fields
-        required_fields = ["columns", "sample_data", "detected_format", "row_count_estimate"]
-        for field in required_fields:
+        # BUG-022: Verify nested structure (analysis.sheets)
+        # After fix, get_file_structure returns nested structure matching TypeScript contract
+        required_top_fields = ["import_session_id", "filename", "detected_file_type", "analysis"]
+        for field in required_top_fields:
             if field not in result:
-                return False, f"Missing required field: {field}"
+                return False, f"Missing required top-level field: {field}"
 
-        details = f"JSON valid: True\nFields: {list(result.keys())}"
+        # Verify nested analysis structure
+        analysis = result.get("analysis", {})
+        if not isinstance(analysis, dict):
+            return False, f"'analysis' must be dict, got {type(analysis).__name__}"
+
+        if "sheets" not in analysis:
+            return False, "Missing 'analysis.sheets' field"
+
+        sheets = analysis.get("sheets")
+        if not isinstance(sheets, list):
+            return False, f"'analysis.sheets' must be list, got {type(sheets).__name__}"
+
+        if len(sheets) == 0:
+            return False, "analysis.sheets is empty"
+
+        # Verify first sheet structure
+        sheet = sheets[0]
+        if not isinstance(sheet, dict):
+            return False, f"Sheet must be dict, got {type(sheet).__name__}"
+
+        required_sheet_fields = ["columns", "sample_data", "row_count", "detected_format"]
+        for field in required_sheet_fields:
+            if field not in sheet:
+                return False, f"Missing required sheet field: {field}"
+
+        # Verify sheet data types
+        if not isinstance(sheet.get("columns"), list):
+            return False, "Sheet 'columns' must be list"
+
+        if not isinstance(sheet.get("sample_data"), list):
+            return False, "Sheet 'sample_data' must be list"
+
+        details = (
+            f"JSON valid: True\n"
+            f"Structure: Nested (analysis.sheets)\n"
+            f"Sheets: {len(sheets)}\n"
+            f"Columns: {len(sheet.get('columns', []))}\n"
+            f"Sample rows: {len(sheet.get('sample_data', []))}"
+        )
         return True, details
 
     finally:

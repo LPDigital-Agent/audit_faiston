@@ -27,7 +27,9 @@ from strands.hooks.events import (
 )
 
 from shared.circuit_breaker import CircuitBreaker
-from tools.dynamodb_client import SGAAuditLogger
+
+# NOTE: SGAAuditLogger imported lazily in __init__ to avoid package name collision
+# between top-level tools/ and agents/tools/ during module initialization.
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,9 @@ class SecurityAuditHook(HookProvider):
             reset_timeout=reset,
             name="security_audit_hook",
         )
+
+        # Lazy import to avoid package name collision during module initialization
+        from tools.dynamodb_client import SGAAuditLogger
 
         # Audit logger (reuse existing SGAAuditLogger)
         self.audit_logger = SGAAuditLogger()

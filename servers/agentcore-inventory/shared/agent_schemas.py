@@ -80,6 +80,24 @@ class TransformationStatus(str, Enum):
     PARTIAL = "partial"          # Some rows failed (rejection report available)
 
 
+class ReviewSeverity(str, Enum):
+    """Severity level of code review findings."""
+    PASS = "pass"              # No issues, can approve
+    INFO = "info"              # Minor suggestions
+    WARNING = "warning"        # Should fix but not blocking
+    CRITICAL = "critical"      # Must fix before merge
+
+
+class ReviewFindingType(str, Enum):
+    """Type of code review finding."""
+    SECURITY = "security"              # Security vulnerability
+    COMPLEXITY = "complexity"          # High complexity
+    COVERAGE = "coverage"              # Low test coverage
+    TYPE_SAFETY = "type_safety"        # Type annotation issues
+    STYLE = "style"                    # Code style issues
+    BEST_PRACTICE = "best_practice"    # Violates best practices
+
+
 # =============================================================================
 # Phase 5: ObservationAgent Enums
 # =============================================================================
@@ -340,6 +358,98 @@ class MissingRequiredField(BaseModel):
     available_sources: List[str] = Field(
         default_factory=list,
         description="File columns that could potentially match"
+    )
+
+
+# =============================================================================
+# NEXO File Analysis Response Models (BUG-022 Fix)
+# =============================================================================
+
+class NexoSheetData(BaseModel):
+    """
+    Single sheet structure from file analysis.
+
+    BUG-022 FIX: Standardized nested structure matching TypeScript interface.
+    Used for CSV/TXT files (single sheet) and Excel files (multiple sheets).
+    """
+    columns: List[str] = Field(
+        description="Column names extracted from file header"
+    )
+    sample_data: List[Dict[str, str]] = Field(
+        description="Sample rows from the sheet (max 3 rows for preview)"
+    )
+    row_count: int = Field(
+        description="Estimated number of rows in this sheet"
+    )
+    detected_format: str = Field(
+        description="File format: csv_semicolon, csv_comma, excel, etc."
+    )
+
+
+class NexoAnalysisData(BaseModel):
+    """
+    Nested analysis structure matching frontend NexoAnalyzeFileResponse contract.
+
+    BUG-022 FIX: Enforces consistent nested structure across all code paths.
+    Previously, Mode 2.5 returned flat structure causing frontend normalization.
+    """
+    sheets: List[NexoSheetData] = Field(
+        description="Sheet-level data (1 element for CSV/TXT, N for Excel)"
+    )
+    sheet_count: int = Field(
+        description="Total number of sheets in the file"
+    )
+    total_rows: int = Field(
+        description="Total row count across all sheets"
+    )
+    recommended_strategy: str = Field(
+        default="direct_import",
+        description="Recommended import strategy: direct_import, review_required, etc."
+    )
+
+
+class NexoAnalyzeFileResponse(BaseModel):
+    """
+    Complete NEXO file analysis response matching TypeScript interface.
+
+    BUG-022 FIX: Type-safe contract between backend and frontend.
+    Replaces ad-hoc dict structures with validated Pydantic model.
+
+    TypeScript contract location:
+    client/services/sgaAgentcore.ts:1461-1502 (NexoAnalyzeFileResponse)
+    """
+    success: bool = Field(
+        description="Whether the file analysis succeeded"
+    )
+    error: Optional[str] = Field(
+        default=None,
+        description="Error message if analysis failed"
+    )
+    import_session_id: str = Field(
+        description="Unique session identifier for this import"
+    )
+    filename: str = Field(
+        description="Original filename from S3 key"
+    )
+    detected_file_type: str = Field(
+        description="Detected file type/format"
+    )
+    analysis: NexoAnalysisData = Field(
+        description="Nested analysis data with sheets information"
+    )
+    column_mappings: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Column mapping proposals (populated by SchemaMapper)"
+    )
+    overall_confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Overall mapping confidence score (0.0-1.0)"
+    )
+    questions: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Questions requiring user input"
     )
 
 
@@ -608,6 +718,152 @@ class RepairResponse(AgentResponseBase):
     human_message: str = Field(
         default="",
         description="User-facing message in pt-BR about repair status"
+    )
+
+
+# =============================================================================
+# Code Review Agent Sub-Models
+# =============================================================================
+
+
+class ReviewFinding(BaseModel):
+    """
+    Single code review finding from Code Review Agent.
+
+    Represents a specific issue or suggestion found during automated
+    peer review (security, complexity, coverage, style, etc.).
+    """
+    file_path: str = Field(
+        description="File where issue was found"
+    )
+    line_number: Optional[int] = Field(
+        default=None,
+        description="Line number where issue occurs (if applicable)"
+    )
+    finding_type: ReviewFindingType = Field(
+        description="Type of finding (security, complexity, coverage, etc.)"
+    )
+    severity: ReviewSeverity = Field(
+        description="Severity level (pass, info, warning, critical)"
+    )
+    title: str = Field(
+        max_length=100,
+        description="Short title (e.g., 'SQL Injection Risk', 'High Complexity')"
+    )
+    description: str = Field(
+        description="Detailed description of the issue in pt-BR"
+    )
+    recommendation: str = Field(
+        description="Suggested fix or improvement in pt-BR"
+    )
+    code_snippet: Optional[str] = Field(
+        default=None,
+        description="Relevant code snippet showing the issue"
+    )
+
+
+class CodeMetrics(BaseModel):
+    """
+    Code quality metrics from AST analysis and coverage tools.
+
+    Used by Code Review Agent to quantify code quality and complexity.
+    """
+    cyclomatic_complexity: int = Field(
+        default=0,
+        description="McCabe cyclomatic complexity (max per function)"
+    )
+    lines_of_code: int = Field(
+        default=0,
+        description="Total lines of code changed in PR"
+    )
+    test_coverage: float = Field(
+        default=0.0, ge=0.0, le=100.0,
+        description="Test coverage percentage for changed lines"
+    )
+    type_coverage: float = Field(
+        default=0.0, ge=0.0, le=100.0,
+        description="Type annotation coverage percentage"
+    )
+    functions_analyzed: int = Field(
+        default=0,
+        description="Number of functions analyzed"
+    )
+    security_issues: int = Field(
+        default=0,
+        description="Number of security issues found"
+    )
+
+
+class CodeReviewResponse(AgentResponseBase):
+    """
+    Response from Code Review Agent (Red Team).
+
+    Contains automated peer review findings including security issues,
+    complexity analysis, test coverage gaps, and code quality metrics.
+
+    Triggered after RepairAgent creates DRAFT PR for human review.
+    Acts as automated adversary to catch issues before human approval.
+    """
+    # PR metadata
+    pr_number: int = Field(
+        description="Pull request number being reviewed"
+    )
+    pr_url: str = Field(
+        default="",
+        description="Full GitHub PR URL"
+    )
+    review_posted: bool = Field(
+        default=False,
+        description="Whether review comments were posted to GitHub"
+    )
+
+    # Review status
+    severity: ReviewSeverity = Field(
+        default=ReviewSeverity.PASS,
+        description="Overall review severity (pass, info, warning, critical)"
+    )
+    recommendation: str = Field(
+        default="approve",
+        description="approve, request_changes, or comment"
+    )
+
+    # Findings
+    findings: List[ReviewFinding] = Field(
+        default_factory=list,
+        description="All findings from code review (security, complexity, etc.)"
+    )
+    critical_count: int = Field(
+        default=0,
+        description="Number of critical findings (must fix)"
+    )
+    warning_count: int = Field(
+        default=0,
+        description="Number of warning findings (should fix)"
+    )
+    info_count: int = Field(
+        default=0,
+        description="Number of info findings (suggestions)"
+    )
+
+    # Metrics
+    metrics: CodeMetrics = Field(
+        description="Code quality metrics from analysis"
+    )
+
+    # Files reviewed
+    files_reviewed: List[str] = Field(
+        default_factory=list,
+        description="Python files analyzed in this review"
+    )
+    files_skipped: List[str] = Field(
+        default_factory=list,
+        description="Files skipped (non-Python, excluded paths, etc.)"
+    )
+
+    # Human message
+    human_message: str = Field(
+        default="",
+        description="User-facing review summary in pt-BR"
     )
 
 
@@ -1157,6 +1413,8 @@ __all__ = [
     "InsightCategory",  # Phase 5
     "InsightSeverity",  # Phase 5
     "InsightStatus",  # Phase 5
+    "ReviewSeverity",  # Code Review Agent
+    "ReviewFindingType",  # Code Review Agent
     # Base
     "AgentResponseBase",
     # Debug sub-models
@@ -1172,6 +1430,9 @@ __all__ = [
     # ObservationAgent sub-models (Phase 5)
     "ActionPayload",
     "InsightReport",
+    # Code Review Agent sub-models
+    "ReviewFinding",
+    "CodeMetrics",
     # Specialist responses
     "ValidationResponse",
     "EnrichmentResponse",
@@ -1179,6 +1440,7 @@ __all__ = [
     "IntakeResponse",
     "DebugAnalysisResponse",
     "RepairResponse",
+    "CodeReviewResponse",  # Code Review Agent
     "LearningResponse",
     "ObservationResponse",
     "SchemaEvolutionResponse",
