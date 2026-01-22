@@ -83,6 +83,7 @@ import type {
   SGAImportPreviewResponse,
   SGAImportExecuteResponse,
   SGAPNMappingValidationResponse,
+  AgentJobResponse,
   SGAGetAccuracyMetricsRequest,
   SGAGetAccuracyMetricsResponse,
   SGAReconcileSAPRequest,
@@ -781,11 +782,29 @@ export async function executeImport(params: {
 }
 
 /**
+ * Async response wrapper for NEXO import.
+ * Supports both sync (legacy) and async (fire-and-forget) response types.
+ */
+export interface NexoImportAsyncResponse {
+  /** Whether this is an async job response */
+  is_async: boolean;
+  /** Async job info (if is_async=true) */
+  job?: AgentJobResponse;
+  /** Sync result (if is_async=false, legacy) */
+  result?: SGAImportExecuteResponse;
+}
+
+/**
  * Execute NEXO import: Insert into pending_entry_items (not movements).
  *
  * FIX (January 2026): NEXO Import was incorrectly using executeImport which
  * creates movements directly (requiring valid part_numbers). NEXO should
  * insert into pending_entry_items for operator review first.
+ *
+ * UPDATE (January 2026): Now supports async fire-and-forget pattern.
+ * Backend may return either:
+ * - 200 OK with SGAImportExecuteResponse (legacy sync)
+ * - 202 Accepted with AgentJobResponse (new async)
  */
 export async function executeNexoImport(params: {
   session_state: Record<string, unknown>;  // Full session state for STATELESS architecture
@@ -794,11 +813,35 @@ export async function executeNexoImport(params: {
   column_mappings: Array<{ file_column: string; target_field: string }>;
   project_id?: string;
   destination_location_id?: string;
-}): Promise<AgentCoreResponse<SGAImportExecuteResponse>> {
-  return invokeSGAAgentCore<SGAImportExecuteResponse>({
+}): Promise<AgentCoreResponse<NexoImportAsyncResponse>> {
+  // Invoke the backend
+  const response = await invokeSGAAgentCore<SGAImportExecuteResponse | AgentJobResponse>({
     action: 'nexo_execute_import',
     ...params,
   });
+
+  const data = response.data;
+
+  // Detect async response by presence of job_id and status fields
+  if (data && typeof data === 'object' && 'job_id' in data && 'status' in data) {
+    // New async fire-and-forget response
+    return {
+      ...response,
+      data: {
+        is_async: true,
+        job: data as AgentJobResponse,
+      },
+    };
+  }
+
+  // Legacy sync response
+  return {
+    ...response,
+    data: {
+      is_async: false,
+      result: data as SGAImportExecuteResponse,
+    },
+  };
 }
 
 /**

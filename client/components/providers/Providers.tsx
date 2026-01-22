@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { apolloClient } from '@/lib/apolloClient';
+import { Toaster } from '@/components/ui/toaster';
 
 // =============================================================================
 // Query Client
@@ -48,7 +49,10 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <ApolloProvider client={apolloClient}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </ApolloProvider>
     </QueryClientProvider>
   );

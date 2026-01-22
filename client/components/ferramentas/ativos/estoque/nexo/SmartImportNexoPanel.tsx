@@ -51,7 +51,11 @@ import {
   type NexoSheetAnalysis,
   type NexoColumnMapping,
   type NexoMissingColumn,
+  type AsyncImportResult,
 } from '@/hooks/ativos/useSmartImportNexo';
+import { toast } from '@/components/ui/use-toast';
+import { useInventoryOperations } from '@/contexts/ativos/InventoryOperationsContext';
+import type { BackgroundJob } from '@/lib/ativos/types';
 import { NexoExplanation } from '@/components/shared/nexo-explanation';
 import {
   REASONING_TRACE_EXPLANATION,
@@ -1170,6 +1174,9 @@ export function SmartImportNexoPanel({
     reviewSummary,
   } = useSmartImportNexo();
 
+  // Background job management for fire-and-forget pattern
+  const { registerJob } = useInventoryOperations();
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
@@ -1223,16 +1230,57 @@ export function SmartImportNexoPanel({
   // Handle approve and import (HIL approval)
   // FIX (January 2026): Previously this silently swallowed errors, causing UI loop
   // Now shows error message to user so they understand why import didn't proceed
+  // FIX (January 2026): Support async fire-and-forget pattern for instant UI response
   const handleApproveAndImport = async () => {
     setIsSubmitting(true);
     try {
-      await approveAndImport();
+      const importResult = await approveAndImport();
+
+      // =======================================================================
+      // ASYNC PATH: Job queued in backend (fire-and-forget)
+      // Register job for tracking, show toast, close immediately
+      // =======================================================================
+      if (importResult.isAsync && importResult.jobId) {
+        const job: BackgroundJob = {
+          job_id: importResult.jobId,
+          type: 'smart_import',
+          title: `Importação: ${state.analysis?.filename || 'arquivo'}`,
+          status: 'queued',
+          message: importResult.humanMessage || 'Processando em segundo plano',
+          started_at: new Date().toISOString(),
+          metadata: {
+            filename: state.analysis?.filename,
+            session_id: state.analysis?.sessionId,
+          },
+        };
+
+        registerJob(job);
+
+        toast({
+          title: 'NEXO assumiu a importação',
+          description: 'Você será notificado quando terminar. Pode continuar trabalhando.',
+          duration: 6000,
+        });
+
+        // Close modal immediately - NEXO handles the rest
+        onComplete(state.analysis!.sessionId);
+        return;
+      }
+
+      // =======================================================================
+      // SYNC PATH: Legacy immediate response
+      // =======================================================================
       onComplete(state.analysis!.sessionId);
     } catch (err) {
       console.error('[NEXO] Import failed:', err);
-      // FIX: Show error to user instead of silently failing
+      // FIX: Show error via toast instead of alert
       const message = err instanceof Error ? err.message : 'Erro ao executar importação';
-      alert(`Falha na importação: ${message}`);
+      toast({
+        title: 'Falha na importação',
+        description: message,
+        variant: 'destructive',
+        duration: 8000,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1266,12 +1314,48 @@ export function SmartImportNexoPanel({
         throw new Error('Sessão de revisão não encontrada. Por favor, responda às perguntas novamente.');
       }
 
-      await approveAndImport();
+      const importResult = await approveAndImport();
+
+      // =======================================================================
+      // ASYNC PATH: Job queued in backend (fire-and-forget)
+      // =======================================================================
+      if (importResult.isAsync && importResult.jobId) {
+        const job: BackgroundJob = {
+          job_id: importResult.jobId,
+          type: 'smart_import',
+          title: `Importação: ${state.analysis?.filename || 'arquivo'}`,
+          status: 'queued',
+          message: importResult.humanMessage || 'Processando em segundo plano',
+          started_at: new Date().toISOString(),
+          metadata: {
+            filename: state.analysis?.filename,
+            session_id: state.analysis?.sessionId,
+          },
+        };
+
+        registerJob(job);
+
+        toast({
+          title: 'NEXO assumiu a importação',
+          description: 'Você será notificado quando terminar. Pode continuar trabalhando.',
+          duration: 6000,
+        });
+
+        onComplete(state.analysis!.sessionId);
+        return;
+      }
+
+      // SYNC PATH
       onComplete(state.analysis!.sessionId);
     } catch (err) {
       console.error('[NEXO] Import failed:', err);
       const message = err instanceof Error ? err.message : 'Erro ao executar importação';
-      alert(message); // Temporary - should use proper toast/notification
+      toast({
+        title: 'Falha na importação',
+        description: message,
+        variant: 'destructive',
+        duration: 8000,
+      });
     } finally {
       setIsSubmitting(false);
     }

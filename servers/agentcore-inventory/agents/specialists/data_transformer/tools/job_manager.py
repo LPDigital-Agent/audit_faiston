@@ -14,6 +14,7 @@
 # - Notifications via AgentCore Memory (natural conversation UX)
 # =============================================================================
 
+import asyncio
 import json
 import logging
 import uuid
@@ -21,6 +22,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from strands import tool
+
+# A2A Client for inter-agent communication
+from shared.a2a_client import LocalA2AClient
 
 # Memory (AgentCore Memory SDK)
 from shared.memory_manager import AgentMemoryManager, MemoryOriginType
@@ -38,6 +42,52 @@ _JOBS: Dict[str, Dict[str, Any]] = {}
 def _now_iso() -> str:
     """Get current UTC timestamp in ISO-8601 format."""
     return datetime.now(timezone.utc).isoformat()
+
+
+async def _trigger_observation_analysis(
+    session_id: str,
+    job_id: str,
+    user_id: str,
+) -> None:
+    """
+    Fire-and-forget trigger to ObservationAgent after job completion.
+
+    Non-blocking call to notify the ObservationAgent that a transformation
+    job has completed, enabling proactive pattern analysis.
+
+    This follows the Fire-and-Forget pattern:
+    - Does NOT block the main flow
+    - Logs warnings on failure (does not raise)
+    - ObservationAgent analyzes the session asynchronously
+
+    Args:
+        session_id: Import session that completed.
+        job_id: The completed job identifier.
+        user_id: User who owns the data (for actor-scoped analysis).
+    """
+    try:
+        client = LocalA2AClient()
+        await client.invoke_agent(
+            agent_id="observation",
+            payload={
+                "action": "analyze_session",
+                "session_id": session_id,
+                "job_id": job_id,
+                "actor_id": user_id,
+                "time_window_hours": 24,  # Tactical analysis
+            },
+            timeout=5.0,  # Short timeout - fire and forget
+        )
+        logger.info(
+            f"[JobManager] Triggered ObservationAgent for session={session_id}, "
+            f"job={job_id}"
+        )
+    except Exception as e:
+        # Non-blocking - log warning and continue
+        # The main job flow must not be affected by observation failures
+        logger.warning(
+            f"[JobManager] ObservationAgent trigger failed (non-blocking): {e}"
+        )
 
 
 @tool
@@ -217,6 +267,16 @@ def update_job_status(
     # Set completed_at if terminal status
     if status in ["completed", "failed", "partial"]:
         job["completed_at"] = _now_iso()
+
+        # Fire-and-forget: Trigger ObservationAgent for pattern analysis
+        # This is non-blocking and does not affect the job completion flow
+        asyncio.create_task(
+            _trigger_observation_analysis(
+                session_id=job["session_id"],
+                job_id=job_id,
+                user_id=job["user_id"],
+            )
+        )
 
     logger.info(
         f"[JobManager] Updated job {job_id}: status={job['status']}, "

@@ -1,5 +1,5 @@
 # =============================================================================
-# Inventory Hub Orchestrator - Phase 1+2+3+4: Full Smart Import Flow
+# Inventory Hub Orchestrator - Phase 1+2+3+4+5: Full Smart Import Flow
 # =============================================================================
 # Central intelligence for SGA inventory file ingestion.
 #
@@ -25,6 +25,10 @@
 #   9. Transform and load data via A2A (DataTransformer specialist)
 #  10. Fire-and-Forget background processing with job tracking
 #  11. Check job status and pending notifications
+# Phase 5:
+#  12. Check proactive insights from ObservationAgent
+#  13. Request on-demand health analysis
+#  14. Display insights with dynamic batch sizing
 #
 # RESPONSE LANGUAGE:
 # - System prompt: English (as per CLAUDE.md)
@@ -34,8 +38,9 @@
 # - STM (Short-Term Memory) for tracking upload session context
 # - LTM integration via SchemaMapper for cross-import learning
 # - Job notifications via AgentCore Memory (Fire-and-Forget UX)
+# - Proactive insights from ObservationAgent in /nexo/intuition namespace
 #
-# VERSION: 2026-01-21T22:00:00Z (Phase 4 update)
+# VERSION: 2026-01-22T00:00:00Z (Phase 5 update)
 # =============================================================================
 
 import json
@@ -125,6 +130,14 @@ Your primary role is to help users upload inventory files securely.
 
 9. **Check Notifications** (Phase 4): Use `check_notifications` at the start of
    conversations to see if any background jobs completed. Present results naturally.
+
+10. **Check Observations** (Phase 5): Use `check_observations` at the start of
+    conversations to see if the ObservationAgent has proactive insights. Present
+    them naturally, prioritizing CRITICAL issues.
+
+11. **Request Health Analysis** (Phase 5): Use `request_health_analysis` when user
+    asks "Como está minha operação?" or similar. Triggers deep analysis by the
+    ObservationAgent.
 
 ## Supported File Types
 
@@ -349,6 +362,50 @@ Assistant: "Sua importação está em andamento!
 - **Status:** Processando
 
 Vou te avisar quando terminar."
+
+### Phase 5: Proactive Insights (Nexo's Intuition)
+The ObservationAgent monitors patterns and health, providing proactive recommendations.
+
+**At Session Start:**
+1. Call `check_observations(user_id)` alongside `check_notifications`
+2. If CRITICAL insights exist: Present immediately (focus mode - 1 insight only)
+3. If WARNING/INFO only: Present up to 3 insights (routine mode)
+4. Present insights naturally in the conversation
+
+**On User Request:**
+- If user asks "Como está minha operação?" → call `request_health_analysis`
+- If user asks about patterns or issues → insights may already be pending
+
+**Insight Presentation:**
+- CRITICAL (🔴): "Atenção! Detectei um problema que requer ação imediata: [insight]"
+- WARNING (⚠️): "Notei algo que vale revisar: [insight]"
+- INFO (ℹ️): "Uma sugestão para otimizar: [insight]"
+
+**One-Click Actions:**
+Some insights include an `action_payload` for one-click fixes. Present these as:
+"Posso corrigir isso automaticamente para você. Quer que eu faça?"
+
+### Example: Session Start with Insight
+[At session start, call check_observations and check_notifications in parallel]
+[Observation found: CRITICAL insight about duplicate part numbers]
+Assistant: "Bom dia! Antes de continuarmos...
+
+🔴 **Atenção:** Detectei 3 part numbers duplicados no seu inventário.
+Isso pode causar problemas de estoque. Quer que eu mostre os detalhes?"
+
+### Example: User Asks About Operations
+User: "Como está minha operação?"
+[Call request_health_analysis(user_id, lookback_days=7)]
+Assistant: "Vou analisar sua operação da última semana..."
+[Later, insights appear via check_observations]
+Assistant: "Pronto! Aqui está o resumo:
+
+**Saúde Geral:** 85% (Boa)
+- ✅ 1.480 itens importados esta semana
+- ⚠️ 20 itens rejeitados (taxa de 1.3%)
+- ℹ️ Você importa mais às terças-feiras às 10h
+
+Quer ver recomendações de melhoria?"
 """
 
 
@@ -378,13 +435,15 @@ def health_check() -> str:
         "capabilities": [
             "generate_upload_url",
             "verify_file_availability",
-            "analyze_file_structure",  # Phase 2
-            "map_to_schema",           # Phase 3
-            "confirm_mapping",         # Phase 3: HIL
-            "save_training_example",   # Phase 3: Learning
-            "transform_import",        # Phase 4: Fire-and-Forget ETL
-            "check_import_status",     # Phase 4: Job status
-            "check_notifications",     # Phase 4: Job completion
+            "analyze_file_structure",    # Phase 2
+            "map_to_schema",             # Phase 3
+            "confirm_mapping",           # Phase 3: HIL
+            "save_training_example",     # Phase 3: Learning
+            "transform_import",          # Phase 4: Fire-and-Forget ETL
+            "check_import_status",       # Phase 4: Job status
+            "check_notifications",       # Phase 4: Job completion
+            "check_observations",        # Phase 5: Proactive insights
+            "request_health_analysis",   # Phase 5: On-demand analysis
         ],
         "supported_file_types": list(ALLOWED_FILE_TYPES.keys()),
         "max_file_size_mb": 100,
@@ -910,6 +969,233 @@ def check_notifications(user_id: str) -> str:
 
 
 # =============================================================================
+# Phase 5: ObservationAgent Integration (Proactive Insights)
+# =============================================================================
+
+
+@tool
+def check_observations(user_id: str) -> str:
+    """
+    Check for proactive insights from the ObservationAgent.
+
+    Called at session start to see if the ObservationAgent has detected
+    patterns, anomalies, or optimization opportunities. Uses dynamic
+    batch sizing:
+    - If CRITICAL insight exists: Returns only 1 insight (focus mode)
+    - Otherwise: Returns up to 3 insights (routine mode)
+
+    Insights are stored in `/nexo/intuition/{actor_id}` namespace and
+    marked as "delivered" after retrieval.
+
+    Args:
+        user_id: User identifier for scoped insights.
+
+    Returns:
+        JSON string with pending insights:
+        {
+            "success": true,
+            "has_insights": true,
+            "insights": [{
+                "insight_id": "...",
+                "category": "ERROR_PATTERN",
+                "severity": "critical",
+                "title": "Duplicate Part Numbers",
+                "description": "...",
+                "action_payload": {"tool": "...", "params": {...}}
+            }],
+            "total_pending": 5,
+            "displayed": 1,
+            "human_message": "..."
+        }
+    """
+    import asyncio
+    from shared.memory_manager import AgentMemoryManager
+
+    async def _fetch_insights() -> dict:
+        """Async wrapper for memory operations."""
+        memory = AgentMemoryManager(agent_id="inventory_hub", actor_id=user_id)
+
+        # Query pending insights from ObservationAgent's namespace
+        insights = await memory.observe(
+            query="status:pending",
+            namespace=f"/nexo/intuition/{user_id}",
+            category="insight",
+            max_results=10,
+        )
+
+        if not insights:
+            return {
+                "success": True,
+                "has_insights": False,
+                "insights": [],
+                "total_pending": 0,
+                "displayed": 0,
+                "human_message": None,
+            }
+
+        # Parse insights and separate by severity
+        parsed_insights = []
+        criticals = []
+        for item in insights:
+            content = item.get("content", {})
+            if isinstance(content, str):
+                try:
+                    content = json.loads(content)
+                except json.JSONDecodeError:
+                    continue
+
+            severity = content.get("severity", "info")
+            parsed_insights.append(content)
+            if severity == "critical":
+                criticals.append(content)
+
+        # Dynamic batch sizing (per plan)
+        if criticals:
+            display_list = [criticals[0]]  # Crisis mode: 1 only
+        else:
+            display_list = parsed_insights[:3]  # Routine: top 3
+
+        # Mark displayed insights as delivered (fire-and-forget)
+        for insight in display_list:
+            insight_id = insight.get("insight_id")
+            if insight_id:
+                try:
+                    await memory.update_status(
+                        entity_id=insight_id,
+                        status="delivered",
+                    )
+                except Exception:
+                    pass  # Non-blocking
+
+        # Build human message (pt-BR)
+        if criticals:
+            human_message = (
+                f"🔴 Atenção! Detectei {len(criticals)} problema(s) crítico(s) "
+                f"que requer(em) ação imediata."
+            )
+        elif display_list:
+            human_message = (
+                f"ℹ️ Tenho {len(parsed_insights)} insight(s) para você. "
+                f"Mostrando os {len(display_list)} mais relevantes."
+            )
+        else:
+            human_message = None
+
+        return {
+            "success": True,
+            "has_insights": len(display_list) > 0,
+            "insights": display_list,
+            "total_pending": len(parsed_insights),
+            "displayed": len(display_list),
+            "human_message": human_message,
+        }
+
+    try:
+        result = asyncio.run(_fetch_insights())
+        logger.info(
+            f"[InventoryHub] check_observations: {result.get('displayed', 0)} insights "
+            f"for user={user_id}"
+        )
+        return json.dumps(result)
+
+    except Exception as e:
+        debug_error(e, "check_observations", {"user_id": user_id})
+        return json.dumps({
+            "success": False,
+            "has_insights": False,
+            "insights": [],
+            "error": str(e),
+        })
+
+
+@tool
+def request_health_analysis(user_id: str, lookback_days: int = 7) -> str:
+    """
+    Trigger on-demand health analysis via ObservationAgent.
+
+    Called when user asks about operations health, e.g.,
+    "Como está minha operação?" or "Mostre um resumo da semana."
+
+    This is a Fire-and-Forget trigger - the analysis happens in background
+    and results appear on the next check_observations call.
+
+    Args:
+        user_id: User identifier for actor-scoped analysis.
+        lookback_days: Analysis window in days (7 for weekly, 30 for monthly).
+
+    Returns:
+        JSON string with request confirmation:
+        {
+            "success": true,
+            "analysis_requested": true,
+            "lookback_days": 7,
+            "human_message": "Iniciando análise da última semana..."
+        }
+    """
+    import asyncio
+
+    async def _trigger_analysis() -> dict:
+        """Async wrapper for A2A call."""
+        a2a_client = A2AClient()
+        return await a2a_client.invoke_agent(
+            agent_id="observation",
+            payload={
+                "action": "deep_analysis",
+                "actor_id": user_id,
+                "lookback_hours": lookback_days * 24,
+            },
+            timeout=5.0,  # Fire-and-forget: short timeout
+        )
+
+    try:
+        # Validate lookback range
+        if lookback_days < 1:
+            lookback_days = 7
+        elif lookback_days > 90:
+            lookback_days = 90
+
+        # Fire-and-forget: trigger analysis
+        asyncio.run(_trigger_analysis())
+
+        # Generate human message
+        if lookback_days <= 7:
+            period_msg = "última semana"
+        elif lookback_days <= 30:
+            period_msg = "último mês"
+        else:
+            period_msg = f"últimos {lookback_days} dias"
+
+        logger.info(
+            f"[InventoryHub] request_health_analysis: triggered for user={user_id}, "
+            f"lookback={lookback_days} days"
+        )
+
+        return json.dumps({
+            "success": True,
+            "analysis_requested": True,
+            "lookback_days": lookback_days,
+            "human_message": (
+                f"Estou analisando sua operação da {period_msg}. "
+                f"Os insights aparecerão em breve!"
+            ),
+        })
+
+    except Exception as e:
+        # Fire-and-forget: log but don't fail user experience
+        logger.warning(f"[InventoryHub] request_health_analysis trigger failed: {e}")
+        return json.dumps({
+            "success": True,  # Still success - user gets message
+            "analysis_requested": True,
+            "lookback_days": lookback_days,
+            "human_message": (
+                "Vou analisar sua operação. "
+                "Os resultados podem demorar alguns minutos."
+            ),
+            "warning": "Analysis trigger may have failed, retrying automatically.",
+        })
+
+
+# =============================================================================
 # Orchestrator Factory
 # =============================================================================
 
@@ -951,6 +1237,9 @@ def create_inventory_hub() -> Agent:
             transform_import,
             check_import_status,
             check_notifications,
+            # Phase 5: Proactive insights (ObservationAgent)
+            check_observations,
+            request_health_analysis,
             # System
             health_check,
         ],

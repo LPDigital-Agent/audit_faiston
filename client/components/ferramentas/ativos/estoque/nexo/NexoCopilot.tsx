@@ -33,6 +33,7 @@ import { MarkdownContent } from '@/components/ui/markdown-content';
 import { useNexoEstoque } from '@/contexts/ativos';
 import type { QuickAction } from '@/contexts/ativos/NexoEstoqueContext';
 import { KBCitationsList } from './KBCitationCard';
+import { useInventoryOperations } from '@/contexts/ativos/InventoryOperationsContext';
 
 // =============================================================================
 // Icon Map for Quick Actions
@@ -82,6 +83,11 @@ export function NexoCopilot() {
     isPanelOpen,
     togglePanel,
   } = useNexoEstoque();
+
+  // Background job tracking for fire-and-forget imports
+  const { activeJobs, hasActiveImportJobs, getActiveJobCount } = useInventoryOperations();
+  const hasBackgroundWork = hasActiveImportJobs();
+  const activeJobCount = getActiveJobCount();
 
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -174,6 +180,18 @@ export function NexoCopilot() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Background job indicator badge */}
+        {hasBackgroundWork && (
+          <motion.div
+            className="absolute -top-1 -right-1 w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center border-2 border-background"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+          >
+            <span className="text-[10px] font-bold text-white">{activeJobCount}</span>
+          </motion.div>
+        )}
       </motion.button>
 
       {/* Chat Panel */}
@@ -194,7 +212,21 @@ export function NexoCopilot() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-text-primary">NEXO</h3>
-                  <p className="text-xs text-text-muted">Assistente de Estoque</p>
+                  {/* Background job indicator or default subtitle */}
+                  {hasBackgroundWork ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex items-center gap-1.5"
+                    >
+                      <Loader2 className="w-3 h-3 text-cyan-400 animate-spin" />
+                      <span className="text-xs text-cyan-400">
+                        Processando em segundo plano...
+                      </span>
+                    </motion.div>
+                  ) : (
+                    <p className="text-xs text-text-muted">Assistente de Estoque</p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1">
