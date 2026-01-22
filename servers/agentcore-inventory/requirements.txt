@@ -54,3 +54,9 @@ openpyxl>=3.1.0
 # Pure Python library (~500KB), safe for cold start
 # Used by tools/sheet_analyzer.py for legacy Excel files
 xlrd>=2.0.1
+
+# Data processing for file structure analysis (Phase 2 + Phase 4)
+# Used by tools/library/file_processing.py and etl_stream.py
+# IMPORTANT: Uses nrows=5 limit - NEVER loads full files into memory
+# ARM64 wheel available via numpy dependency
+pandas>=2.0.0

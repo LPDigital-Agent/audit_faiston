@@ -28,8 +28,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import boto3
-import pandas as pd
 from botocore.config import Config
+
+# NOTE: pandas is lazy-loaded inside methods to reduce cold start time
+# Do NOT add `import pandas as pd` at module level - see BUG-039
 from botocore.exceptions import ClientError
 
 
@@ -559,6 +561,9 @@ class FileInspector:
                 error_type="DOWNLOAD_ERROR",
             )
 
+        # Lazy import pandas to reduce cold start time (BUG-039)
+        import pandas as pd
+
         # Try UTF-8 first, then Latin-1
         encoding = "utf-8"
         df = None
@@ -674,6 +679,9 @@ class FileInspector:
                 error=f"Failed to download file: {str(e)}",
                 error_type="DOWNLOAD_ERROR",
             )
+
+        # Lazy import pandas to reduce cold start time (BUG-039)
+        import pandas as pd
 
         # Parse Excel
         try:

@@ -1678,7 +1678,39 @@ def invoke(payload: dict, context) -> dict:
                 except ValueError:
                     # Validation failed - re-raise to be caught by outer except
                     raise
-            # BUG-020 v8: Envelope for non-JSON text responses
+            # =======================================================================
+            # BUG-039 FIX: Detect tool failure in LLM text responses
+            # =======================================================================
+            # When a tool fails, the LLM often generates apologetic text like:
+            # "Desculpe, não consegui analisar..." instead of passing the error.
+            # This causes "Erro desconhecido" on frontend because success=True.
+            #
+            # Solution: Detect failure indicators and return proper error envelope.
+            # =======================================================================
+            failure_indicators = [
+                "não consegui",
+                "não foi possível",
+                "houve um problema",
+                "houve um erro",
+                "falhou",
+                "failed",
+                "error occurred",
+                "A2A call failed",
+            ]
+            message_lower = message.lower() if isinstance(message, str) else ""
+            is_failure_message = any(indicator in message_lower for indicator in failure_indicators)
+
+            if is_failure_message:
+                logger.warning(f"[InventoryHub] BUG-039: LLM text indicates tool failure: {message[:200]}")
+                return {
+                    "success": False,
+                    "error": message,  # Use LLM's explanation as the error message
+                    "error_type": "TOOL_FAILURE",
+                    "specialist_agent": "llm",
+                    "agent_id": AGENT_ID,
+                }
+
+            # BUG-020 v8: Envelope for non-JSON text responses (success case)
             return {
                 "success": True,
                 "specialist_agent": "llm",
@@ -1694,22 +1726,89 @@ def invoke(payload: dict, context) -> dict:
             "agent_id": AGENT_ID,
         }
 
+    except CognitiveError as e:
+        # =======================================================================
+        # AUDIT-028 FIX: Preserve DebugAgent enrichment for all CognitiveErrors
+        # =======================================================================
+        # CognitiveError contains enriched data from DebugAgent:
+        # - human_explanation: User-friendly message in pt-BR
+        # - suggested_fix: Actionable fix suggestion in pt-BR
+        # - error_type: Classification for analytics
+        # - recoverable: Whether retry may succeed
+        #
+        # This catch block ensures enriched errors bubble up to frontend
+        # with full context, enabling DebugAnalysisPanel display.
+        # =======================================================================
+        logger.warning(
+            f"[InventoryHub] CognitiveError in invoke: "
+            f"type={e.error_type}, recoverable={e.recoverable}, "
+            f"message={e.technical_message[:100]}"
+        )
+        return {
+            "success": False,
+            "error": e.human_explanation,
+            "technical_error": e.technical_message,
+            "suggested_fix": e.suggested_fix,
+            "specialist_agent": "inventory_hub",
+            "agent_id": AGENT_ID,
+            # AUDIT-028: Include debug_analysis for DebugAnalysisPanel
+            "debug_analysis": {
+                "error_signature": f"inventory_hub_{e.error_type}",
+                "error_type": e.error_type,
+                "technical_explanation": e.technical_message,
+                "root_causes": [],  # DebugAgent would populate this
+                "debugging_steps": [e.suggested_fix] if e.suggested_fix else [],
+                "documentation_links": [],
+                "similar_patterns": [],
+                "recoverable": e.recoverable,
+                "suggested_action": "retry" if e.recoverable else "escalate",
+                "llm_powered": True,  # Came from DebugAgent enrichment
+            },
+            "error_context": {
+                "error_type": e.error_type,
+                "operation": "inventory_hub_invoke",
+                "recoverable": e.recoverable,
+            },
+        }
+
     except Exception as e:
+        # =======================================================================
+        # Fallback for non-enriched exceptions
+        # =======================================================================
+        # These are exceptions that bypassed the @cognitive_sync_handler
+        # (e.g., errors in the agent invocation itself).
+        # We still provide structured error but without LLM enrichment.
+        # =======================================================================
         debug_error(e, "inventory_hub_invoke", {
             "action": payload.get("action"),
             "prompt_len": len(payload.get("prompt", "")),
         })
+        error_type = type(e).__name__
+        is_recoverable = isinstance(e, (ValueError, TimeoutError, ConnectionError, OSError))
         return {
             "success": False,
             "error": str(e),
             "technical_error": str(e),
             "agent_id": AGENT_ID,
+            # AUDIT-028: Include minimal debug_analysis for consistency
+            "debug_analysis": {
+                "error_signature": f"inventory_hub_{error_type}",
+                "error_type": error_type,
+                "technical_explanation": str(e),
+                "root_causes": [],
+                "debugging_steps": [],
+                "documentation_links": [],
+                "similar_patterns": [],
+                "recoverable": is_recoverable,
+                "suggested_action": "retry" if is_recoverable else "escalate",
+                "llm_powered": False,  # Not enriched by DebugAgent
+            },
             "error_context": {
-                "error_type": type(e).__name__,
+                "error_type": error_type,
                 "operation": "inventory_hub_invoke",
                 # BUG-020: ValueError (validation errors) are recoverable - user can retry
                 # CRITICAL: Enables "Tentar Novamente" button in Frontend
-                "recoverable": isinstance(e, (ValueError, TimeoutError, ConnectionError, OSError)),
+                "recoverable": is_recoverable,
             },
         }
 
