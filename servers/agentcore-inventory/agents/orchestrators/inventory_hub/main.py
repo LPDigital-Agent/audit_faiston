@@ -69,6 +69,7 @@ from agents.tools.analysis_tools import get_file_structure
 from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.debug_hook import DebugHook
+from shared.hooks.security_audit_hook import SecurityAuditHook
 
 # AUDIT-003: Global error capture for Debug Agent enrichment
 from shared.debug_utils import debug_error
@@ -1646,6 +1647,7 @@ def create_inventory_hub() -> Agent:
         LoggingHook(log_level=logging.INFO),
         MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
         DebugHook(timeout_seconds=30.0),
+        SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
     ]
 
     agent = Agent(
@@ -1916,10 +1918,15 @@ def invoke(payload: dict, context) -> dict:
         # (e.g., errors in the agent invocation itself).
         # We still provide structured error but without LLM enrichment.
         # =======================================================================
-        debug_error(e, "inventory_hub_invoke", {
+        # Capture debug_error enrichment
+        enrichment = debug_error(e, "inventory_hub_invoke", {
             "action": payload.get("action"),
             "prompt_len": len(payload.get("prompt", "")),
         })
+
+        # Extract analysis if enrichment succeeded
+        analysis = enrichment.get("analysis", {}) if enrichment.get("enriched") else {}
+
         error_type = type(e).__name__
         is_recoverable = isinstance(e, (ValueError, TimeoutError, ConnectionError, OSError))
         return {
@@ -1927,18 +1934,19 @@ def invoke(payload: dict, context) -> dict:
             "error": str(e),
             "technical_error": str(e),
             "agent_id": AGENT_ID,
-            # AUDIT-028: Include minimal debug_analysis for consistency
+            # AUDIT-028: Include debug_analysis with enrichment if available
             "debug_analysis": {
                 "error_signature": f"inventory_hub_{error_type}",
                 "error_type": error_type,
-                "technical_explanation": str(e),
-                "root_causes": [],
-                "debugging_steps": [],
-                "documentation_links": [],
-                "similar_patterns": [],
-                "recoverable": is_recoverable,
-                "suggested_action": "retry" if is_recoverable else "escalate",
-                "llm_powered": False,  # Not enriched by DebugAgent
+                "technical_explanation": analysis.get("technical_explanation", str(e)),
+                "human_explanation": analysis.get("human_explanation", ""),
+                "root_causes": analysis.get("root_causes", []),
+                "debugging_steps": analysis.get("debugging_steps", []),
+                "documentation_links": analysis.get("documentation_links", []),
+                "similar_patterns": analysis.get("similar_patterns", []),
+                "recoverable": analysis.get("recoverable", is_recoverable),
+                "suggested_action": analysis.get("suggested_action", "retry" if is_recoverable else "escalate"),
+                "llm_powered": enrichment.get("enriched", False),  # Now reflects reality!
             },
             "error_context": {
                 "error_type": error_type,

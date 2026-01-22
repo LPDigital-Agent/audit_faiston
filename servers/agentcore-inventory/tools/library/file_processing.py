@@ -487,7 +487,8 @@ class FileInspector:
         for col in first_row:
             if col:
                 # Normalize: lowercase, remove spaces/underscores
-                clean = col.lower().strip().replace(" ", "_").replace("-", "_")
+                # Use str() to handle float/NaN values from pandas
+                clean = str(col).lower().strip().replace(" ", "_").replace("-", "_")
                 normalized.add(clean)
                 # Also add without underscores
                 normalized.add(clean.replace("_", ""))
@@ -496,20 +497,28 @@ class FileInspector:
 
         return type_variance or type_mismatch or pattern_match
 
-    def _infer_cell_type(self, value: str) -> str:
+    def _infer_cell_type(self, value: Any) -> str:
         """
         Infer basic type of a cell value.
 
         Args:
-            value: Cell value as string.
+            value: Cell value (can be str, float, int, or None from pandas).
 
         Returns:
             Type string: 'int', 'float', 'empty', or 'string'.
         """
-        if not value or value.strip() == "":
+        # Handle None explicitly
+        if value is None:
             return "empty"
 
-        value = value.strip()
+        # Convert to string (handles float NaN, int, etc. from pandas)
+        str_value = str(value)
+
+        # Check for pandas NaN representation and empty strings
+        if str_value.lower() == "nan" or str_value.strip() == "":
+            return "empty"
+
+        value = str_value.strip()
 
         # Try integer
         try:

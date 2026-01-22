@@ -50,6 +50,7 @@ from agents.utils import create_gemini_model, create_agent_skill, AGENT_VERSION
 from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.debug_hook import DebugHook
+from shared.hooks.security_audit_hook import SecurityAuditHook
 
 # AUDIT-003: Global error capture for Debug Agent enrichment
 from shared.debug_utils import debug_error
@@ -71,6 +72,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_ID = "schema_mapper"
 AGENT_NAME = "FaistonSchemaMapper"
+RUNTIME_ID = "faiston_schema_mapper-7fxI9bFHzd"  # From a2a_client.py PROD_RUNTIME_IDS
 AGENT_DESCRIPTION = """
 Senior Data Architect specialized in semantic column mapping.
 Analyzes file columns and proposes mappings to PostgreSQL schema
@@ -80,9 +82,6 @@ Phase 3 of the Smart Import architecture.
 
 # Port for local A2A server (see LOCAL_AGENTS in a2a_client.py)
 AGENT_PORT = 9018
-
-# Runtime ID for AgentCore deployment
-RUNTIME_ID = "faiston_schema_mapper"
 
 # =============================================================================
 # Semantic Dictionary (PT → EN column name mappings)
@@ -556,6 +555,7 @@ def create_agent() -> Agent:
         LoggingHook(log_level=logging.INFO),
         MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
         DebugHook(timeout_seconds=30.0),
+        SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
     ]
 
     agent = Agent(

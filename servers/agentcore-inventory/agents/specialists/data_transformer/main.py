@@ -43,6 +43,7 @@ from agents.utils import create_gemini_model, AGENT_VERSION
 from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.debug_hook import DebugHook
+from shared.hooks.security_audit_hook import SecurityAuditHook
 
 # AUDIT-003: Global error capture for Debug Agent enrichment
 
@@ -85,8 +86,8 @@ Phase 4 of the Smart Import architecture.
 # Port for local A2A server (see LOCAL_AGENTS in a2a_client.py)
 AGENT_PORT = 9019
 
-# Runtime ID for AgentCore deployment
-RUNTIME_ID = "faiston_data_transformer"
+# Runtime ID for AgentCore deployment (from a2a_client.py PROD_RUNTIME_IDS)
+RUNTIME_ID = "faiston_data_transformer-xjSXPo8HaC"
 
 
 # =============================================================================
@@ -311,6 +312,7 @@ def create_agent() -> Agent:
         LoggingHook(log_level=logging.INFO),
         MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
         DebugHook(timeout_seconds=30.0),
+        SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
     ]
 
     agent = Agent(

@@ -53,6 +53,7 @@ from agents.utils import create_gemini_model, AGENT_VERSION
 from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.debug_hook import DebugHook
+from shared.hooks.security_audit_hook import SecurityAuditHook
 
 # Cognitive error handler (Nexo Immune System)
 from shared.cognitive_error_handler import cognitive_error_handler
@@ -286,6 +287,7 @@ def create_agent() -> Agent:
         LoggingHook(log_level=logging.INFO),
         MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
         DebugHook(timeout_seconds=30.0),
+        SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
     ]
 
     agent = Agent(

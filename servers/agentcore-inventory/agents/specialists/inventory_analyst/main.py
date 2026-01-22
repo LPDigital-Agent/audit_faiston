@@ -27,7 +27,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from strands import Agent, tool
-from shared.hooks import DebugHook, LoggingHook, MetricsHook
+from shared.hooks import DebugHook, LoggingHook, MetricsHook, SecurityAuditHook
 from strands.multiagent.a2a import A2AServer
 from a2a.types import AgentSkill
 
@@ -58,6 +58,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_ID = "faiston_inventory_analyst"
 AGENT_NAME = "InventoryAnalyst"
+RUNTIME_ID = "faiston_inventory_analyst-0uGg1W8ITM"  # From a2a_client.py PROD_RUNTIME_IDS
 AGENT_DESCRIPTION = """
 Technical Data Engineer specialized in file parsing and metadata extraction.
 Inspects CSV/Excel file structures without loading full content.
@@ -245,6 +246,7 @@ def create_agent() -> Agent:
             LoggingHook(),
             MetricsHook(),
             DebugHook(timeout_seconds=30.0),  # 30s timeout for file analysis (standardized)
+            SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
         ],
     )
 

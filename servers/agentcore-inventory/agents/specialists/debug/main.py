@@ -37,7 +37,7 @@ from agents.utils import get_model, AGENT_VERSION, create_gemini_model
 from shared.memory_manager import AgentMemoryManager
 
 # Hooks for observability (ADR-002) and error enrichment (ADR-003)
-from shared.hooks import LoggingHook, MetricsHook, DebugHook
+from shared.hooks import LoggingHook, MetricsHook, DebugHook, SecurityAuditHook
 
 # AUDIT-001: Pydantic response schema for Strands structured output
 from shared.agent_schemas import DebugAnalysisResponse
@@ -58,6 +58,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_ID = "debug"
 AGENT_NAME = "DebugAgent"
+RUNTIME_ID = "faiston_sga_debug-W86Xdj8sAY"  # From a2a_client.py PROD_RUNTIME_IDS
 AGENT_DESCRIPTION = """SPECIALIST Agent for Intelligent Error Analysis and Debugging.
 
 This agent provides intelligent error analysis for the SGA system:
@@ -701,7 +702,12 @@ def create_agent() -> Agent:
             health_check,
         ],
         system_prompt=SYSTEM_PROMPT,
-        hooks=[LoggingHook(), MetricsHook(), DebugHook(timeout_seconds=30.0)],  # TIMEOUT-FIX: Maximum for Gemini Pro
+        hooks=[
+            LoggingHook(),
+            MetricsHook(),
+            DebugHook(timeout_seconds=30.0),
+            SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
+        ],
         structured_output_model=DebugAnalysisResponse,  # AUDIT-001: Strands structured output
     )
 
