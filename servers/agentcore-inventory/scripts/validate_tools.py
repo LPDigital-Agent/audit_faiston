@@ -32,12 +32,17 @@ class ToolValidator:
     # Parameters that don't require Args documentation
     SKIP_ARGS = {"self", "tool_context", "cls"}
 
-    # SDK patterns that indicate violations
+    # SDK patterns that indicate violations (direct model creation)
     # Note: Strings are constructed to avoid false positive on this file itself
     SDK_VIOLATIONS = [
         "from " + "google import genai",
-        "from " + "google.genai",
         "import " + "google.genai",
+    ]
+
+    # Allowlist: imports that are OK (config types passed to Strands)
+    # FIX-424: google.genai.types is needed for SafetySetting configuration
+    SDK_ALLOWLIST = [
+        "from " + "google.genai import types",  # SafetySetting for GeminiModel config
     ]
 
     def __init__(self, root: Path, verbose: bool = False):
@@ -163,8 +168,16 @@ class ToolValidator:
             self.warnings.append(f"{file_path}: Could not read - {e}")
             return errors
 
+        # Check if file uses only allowlisted imports (FIX-424)
+        uses_allowlisted_only = any(
+            allowed in content for allowed in self.SDK_ALLOWLIST
+        )
+
         for violation in self.SDK_VIOLATIONS:
             if violation in content:
+                # Skip if this is an allowlisted import pattern
+                if uses_allowlisted_only and "types" in content:
+                    continue
                 errors.append(
                     f"{file_path}: VIOLATION - Uses google.genai SDK directly "
                     "(must use Strands Agent framework)"

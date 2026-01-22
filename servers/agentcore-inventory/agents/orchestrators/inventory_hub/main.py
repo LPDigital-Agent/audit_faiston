@@ -72,6 +72,10 @@ from shared.debug_utils import debug_error
 # Phase 2: A2A client for calling InventoryAnalyst specialist
 from shared.a2a_client import A2AClient
 
+# Phase 2.5: Direct action routing with cognitive error handling
+from urllib.parse import quote
+from shared.cognitive_error_handler import cognitive_sync_handler, CognitiveError
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -1196,6 +1200,230 @@ def request_health_analysis(user_id: str, lookback_days: int = 7) -> str:
 
 
 # =============================================================================
+# Mode 2.5: Direct Action Routing (Deterministic Operations)
+# =============================================================================
+# These actions bypass LLM reasoning for pure infrastructure operations.
+# Per CLAUDE.md: "Python = Hands" for deterministic execution.
+#
+# 🛡️ SECURITY: S3 keys are namespaced by user_id to enforce tenant isolation.
+# Pattern: uploads/{user_id}/{session_id}/{safe_filename}
+# =============================================================================
+
+DIRECT_ACTIONS = {"get_nf_upload_url", "verify_file"}
+
+
+@cognitive_sync_handler("inventory_hub")
+def _handle_direct_action(action: str, payload: dict, user_id: str, session_id: str) -> dict:
+    """
+    Handle deterministic actions without LLM invocation.
+
+    Returns response in A2A envelope format matching frontend expectations.
+    Exceptions are caught by @cognitive_sync_handler and enriched via DebugAgent.
+
+    Args:
+        action: The action name (e.g., 'get_nf_upload_url')
+        payload: Request payload with action-specific parameters
+        user_id: User identifier for tenant-isolated S3 paths
+        session_id: Session identifier for path namespacing
+
+    Returns:
+        Dict matching OrchestratorEnvelope format:
+        {
+            "success": bool,
+            "specialist_agent": "intake",
+            "response": {...action-specific response...}
+        }
+
+    Raises:
+        CognitiveError: If an error occurs (enriched with human_explanation + suggested_fix)
+    """
+    if action == "get_nf_upload_url":
+        return _handle_get_nf_upload_url(payload, user_id, session_id)
+    elif action == "verify_file":
+        return _handle_verify_file(payload)
+    else:
+        return {
+            "success": False,
+            "error": f"Unknown direct action: {action}",
+            "specialist_agent": "intake",
+        }
+
+
+@cognitive_sync_handler("inventory_hub")
+def _handle_get_nf_upload_url(payload: dict, user_id: str, session_id: str) -> dict:
+    """
+    Generate presigned PUT URL for file upload.
+
+    🛡️ SECURITY: S3 keys are namespaced by user_id to enforce tenant isolation.
+    Pattern: uploads/{user_id}/{session_id}/{safe_filename}
+
+    Args:
+        payload: {filename: str, content_type?: str}
+        user_id: User identifier for S3 metadata and path namespacing
+        session_id: Session identifier for S3 metadata and path namespacing
+
+    Returns:
+        {
+            "success": true,
+            "specialist_agent": "intake",
+            "response": {
+                "upload_url": "https://...",
+                "s3_key": "uploads/{user_id}/{session_id}/...",
+                "expires_in": 300
+            }
+        }
+
+    Raises:
+        CognitiveError: If an error occurs (enriched with human_explanation + suggested_fix)
+    """
+    from agents.tools.intake_tools import ALLOWED_FILE_TYPES
+    from tools.s3_client import SGAS3Client
+
+    filename = payload.get("filename")
+    if not filename:
+        return {
+            "success": False,
+            "error": "Missing required parameter: filename",
+            "specialist_agent": "intake",
+        }
+
+    # Validate extension
+    if "." not in filename:
+        return {
+            "success": False,
+            "error": f"Filename '{filename}' has no extension",
+            "specialist_agent": "intake",
+        }
+
+    extension = filename.rsplit(".", 1)[1].lower()
+    if extension not in ALLOWED_FILE_TYPES:
+        return {
+            "success": False,
+            "error": f"File type '.{extension}' not allowed",
+            "allowed_types": list(ALLOWED_FILE_TYPES.keys()),
+            "specialist_agent": "intake",
+        }
+
+    content_type = payload.get("content_type") or ALLOWED_FILE_TYPES.get(
+        extension, "application/octet-stream"
+    )
+
+    # 🛡️ SECURITY ENFORCEMENT: Actor-Isolated Path
+    # Prevent directory traversal by sanitizing filename
+    safe_filename = filename.replace("/", "_").replace("\\", "_").replace("..", "_")
+    s3_key = f"uploads/{user_id}/{session_id}/{safe_filename}"
+
+    # URL-encode filename to ensure ASCII compliance (S3 metadata RFC 2616)
+    # CRITICAL: This encoded value MUST be sent by frontend as x-amz-meta-original_filename header
+    encoded_filename = quote(filename, safe="")
+
+    # Build metadata dict (these values are signed into the presigned URL)
+    metadata = {
+        "user_id": user_id,
+        "session_id": session_id,
+        "original_filename": encoded_filename,
+    }
+
+    # Generate presigned PUT URL
+    s3_client = SGAS3Client()
+    result = s3_client.generate_upload_url(
+        key=s3_key,
+        content_type=content_type,
+        expires_in=300,  # 5 minutes
+        metadata=metadata,
+    )
+
+    if not result.get("success"):
+        return {
+            "success": False,
+            "error": result.get("error", "Failed to generate URL"),
+            "specialist_agent": "intake",
+        }
+
+    # Verify tenant isolation (defense in depth)
+    if not s3_key.startswith(f"uploads/{user_id}/"):
+        logger.error(f"[InventoryHub] Security violation: s3_key={s3_key} not namespaced to user={user_id}")
+        return {
+            "success": False,
+            "error": "Security violation: path not namespaced",
+            "specialist_agent": "intake",
+        }
+
+    logger.info(f"[InventoryHub] Mode 2.5 upload URL generated: s3_key={s3_key}")
+
+    # CRITICAL: Return required_headers so frontend sends EXACT values that were signed
+    # S3 presigned URLs validate that headers match the signature - any mismatch = 403 Forbidden
+    return {
+        "success": True,
+        "specialist_agent": "intake",
+        "response": {
+            "upload_url": result["upload_url"],
+            "s3_key": result["key"],
+            "expires_in": result["expires_in"],
+            # Frontend MUST send these exact headers with these exact values
+            "required_headers": {
+                "Content-Type": content_type,
+                "x-amz-meta-original_filename": encoded_filename,
+                "x-amz-meta-user_id": user_id,
+                "x-amz-meta-session_id": session_id,
+            },
+        },
+    }
+
+
+@cognitive_sync_handler("inventory_hub")
+def _handle_verify_file(payload: dict) -> dict:
+    """
+    Verify file exists and is ready for processing.
+
+    Args:
+        payload: {s3_key: str}
+
+    Returns:
+        {
+            "success": true,
+            "specialist_agent": "intake",
+            "response": {
+                "exists": true,
+                "s3_key": "...",
+                "content_type": "...",
+                "ready_for_processing": true
+            }
+        }
+    """
+    from tools.s3_client import SGAS3Client
+
+    s3_key = payload.get("s3_key")
+    if not s3_key:
+        return {
+            "success": False,
+            "error": "Missing required parameter: s3_key",
+            "specialist_agent": "intake",
+        }
+
+    s3_client = SGAS3Client()
+    result = s3_client.get_file_metadata(key=s3_key, retry_count=3, retry_delay=1.0)
+
+    if not result.get("success"):
+        return {
+            "success": False,
+            "error": result.get("error", "Failed to verify file"),
+            "specialist_agent": "intake",
+        }
+
+    return {
+        "success": True,
+        "specialist_agent": "intake",
+        "response": {
+            "exists": result.get("exists", False),
+            "s3_key": s3_key,
+            "content_type": result.get("content_type"),
+            "ready_for_processing": result.get("exists", False),
+        },
+    }
+
+
+# =============================================================================
 # Orchestrator Factory
 # =============================================================================
 
@@ -1307,6 +1535,28 @@ def invoke(payload: dict, context) -> dict:
         if action == "health_check":
             return json.loads(health_check())
 
+        # Mode 2.5: Direct action routing (deterministic, no LLM)
+        # 🛡️ SECURITY: user_id is passed for tenant-isolated S3 paths
+        # CognitiveError handling: exceptions enriched by DebugAgent via @cognitive_sync_handler
+        if action in DIRECT_ACTIONS:
+            logger.info(
+                f"[InventoryHub] Mode 2.5 direct action: action={action}, "
+                f"user={user_id}, session={session_id}"
+            )
+            try:
+                return _handle_direct_action(action, payload, user_id, session_id)
+            except CognitiveError as e:
+                # Error enriched by DebugAgent - return structured response with user-friendly message
+                logger.warning(f"[InventoryHub] CognitiveError in Mode 2.5: {e.technical_message}")
+                return {
+                    "success": False,
+                    "error": e.human_explanation,
+                    "technical_error": e.technical_message,
+                    "suggested_fix": e.suggested_fix,
+                    "specialist_agent": "intake",
+                    "agent_id": AGENT_ID,
+                }
+
         # Mode 2: Natural language processing via LLM
         if not prompt:
             return {
@@ -1314,7 +1564,7 @@ def invoke(payload: dict, context) -> dict:
                 "error": "Missing 'prompt' or 'action' in request",
                 "usage": {
                     "prompt": "Natural language request (e.g., 'Quero fazer upload de um arquivo CSV')",
-                    "action": "Action name (health_check)",
+                    "action": f"Action name (health_check, {', '.join(DIRECT_ACTIONS)})",
                 },
                 "agent_id": AGENT_ID,
             }

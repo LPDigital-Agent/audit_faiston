@@ -21,6 +21,10 @@ import os
 # Strands Model Provider for Gemini (per CLAUDE.md - Gemini 2.5 Family ONLY)
 from strands.models.gemini import GeminiModel
 
+# Google GenAI types for safety settings (FIX-424 v2: Strands Native)
+# Uses google-genai SDK (installed via strands-agents[gemini]), NOT legacy google-generativeai
+from google.genai import types as genai_types
+
 # A2A Protocol Types for Agent Card Discovery (100% A2A Architecture)
 from a2a.types import AgentSkill
 
@@ -262,9 +266,37 @@ class LazyGeminiModel:
             # 'application/json' is unsupported"
             # Reference: https://ai.google.dev/gemini-api/docs/function-calling
             # JSON output is enforced via system prompt instead.
+            #
+            # FIX-424 v2: Safety settings using google-genai SDK (Strands Native)
+            # Uses list of SafetySetting objects instead of dict with enum keys.
+            # Without explicit safety settings, Gemini uses moderate blocking that can
+            # incorrectly flag legitimate business content (part numbers, quantities, prices)
+            # as harmful, causing empty responses and A2A 424 Dependency Failed errors.
+            # Reference: https://github.com/googleapis/python-genai
+            safety_settings = [
+                genai_types.SafetySetting(
+                    category='HARM_CATEGORY_HATE_SPEECH',
+                    threshold='BLOCK_NONE',
+                ),
+                genai_types.SafetySetting(
+                    category='HARM_CATEGORY_DANGEROUS_CONTENT',
+                    threshold='BLOCK_NONE',
+                ),
+                genai_types.SafetySetting(
+                    category='HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                    threshold='BLOCK_NONE',
+                ),
+                genai_types.SafetySetting(
+                    category='HARM_CATEGORY_HARASSMENT',
+                    threshold='BLOCK_NONE',
+                ),
+            ]
+            logger.info("[LazyGeminiModel] Safety settings configured with BLOCK_NONE (FIX-424 v2)")
+
             params = {
                 "temperature": 0.7,
                 "max_output_tokens": 16384,  # 4x increase to handle detailed analysis
+                "safety_settings": safety_settings,  # FIX-424: Prevent response blocking
             }
 
             # BUG-009 CORRECT FIX: Different thinking parameters per Gemini version
