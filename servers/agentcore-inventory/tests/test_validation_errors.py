@@ -225,3 +225,161 @@ class TestCognitiveErrorStructure:
         error = exc_info.value
         # User can fix validation errors and retry
         assert error.recoverable is True
+
+
+# =============================================================================
+# Test: _validate_llm_response (BUG-020: Output Validation)
+# =============================================================================
+
+
+class TestOutputValidation:
+    """
+    BUG-020: Output validation for LLM responses.
+
+    Tests verify that incomplete LLM responses trigger validation errors
+    which are enriched via DebugAgent (same pattern as input validation).
+    """
+
+    def test_incomplete_file_analysis_raises_error(self, mock_cognitive_middleware):
+        """Verify missing sheets/columns triggers validation error."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+        from shared.cognitive_error_handler import CognitiveError
+
+        response = {"status": "success"}  # Missing sheets/columns
+        with pytest.raises(CognitiveError) as exc_info:
+            _validate_llm_response(response, "nexo_analyze_file")
+
+        error = exc_info.value
+        assert error.error_type == "ValueError"
+        assert "incompleta" in error.technical_message.lower()
+
+    def test_empty_sheets_raises_error(self, mock_cognitive_middleware):
+        """Verify empty sheets array triggers validation error."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+        from shared.cognitive_error_handler import CognitiveError
+
+        response = {"status": "success", "sheets": []}  # Empty array
+        with pytest.raises(CognitiveError) as exc_info:
+            _validate_llm_response(response, "nexo_analyze_file")
+
+        error = exc_info.value
+        assert error.error_type == "ValueError"
+        assert "zero abas" in error.technical_message.lower()
+
+    def test_valid_file_analysis_passes(self):
+        """Verify valid response passes validation."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {"status": "success", "sheets": [{"name": "Sheet1"}]}
+        result = _validate_llm_response(response, "nexo_analyze_file")
+        assert result == response
+
+    def test_columns_also_accepted_for_file_analysis(self):
+        """Verify 'columns' field is accepted as alternative to 'sheets'."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {"status": "success", "columns": ["col_a", "col_b"]}
+        result = _validate_llm_response(response, "nexo_analyze_file")
+        assert result == response
+
+    def test_incomplete_mapping_raises_error(self, mock_cognitive_middleware):
+        """Verify missing mappings triggers validation error."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+        from shared.cognitive_error_handler import CognitiveError
+
+        response = {"status": "success", "overall_confidence": 0.87}
+        with pytest.raises(CognitiveError) as exc_info:
+            _validate_llm_response(response, "map_to_schema")
+
+        error = exc_info.value
+        assert error.error_type == "ValueError"
+        assert "mappings" in error.technical_message.lower()
+
+    def test_empty_mappings_raises_error(self, mock_cognitive_middleware):
+        """Verify empty mappings array triggers validation error."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+        from shared.cognitive_error_handler import CognitiveError
+
+        response = {"status": "success", "mappings": []}
+        with pytest.raises(CognitiveError) as exc_info:
+            _validate_llm_response(response, "map_to_schema")
+
+        error = exc_info.value
+        assert error.error_type == "ValueError"
+        assert "nenhuma coluna" in error.technical_message.lower()
+
+    def test_valid_mapping_passes(self):
+        """Verify valid mapping response passes validation."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {
+            "status": "success",
+            "mappings": [{"source": "codigo", "target": "part_number"}],
+        }
+        result = _validate_llm_response(response, "map_to_schema")
+        assert result == response
+
+    def test_schema_mapper_action_also_validated(self, mock_cognitive_middleware):
+        """Verify 'schema_mapper' action is validated same as 'map_to_schema'."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+        from shared.cognitive_error_handler import CognitiveError
+
+        response = {"status": "success"}  # Missing mappings
+        with pytest.raises(CognitiveError):
+            _validate_llm_response(response, "schema_mapper")
+
+    def test_unknown_action_skips_validation(self):
+        """Verify unknown actions pass through without validation."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {"status": "success"}  # Would fail for known actions
+        result = _validate_llm_response(response, "unknown_action")
+        assert result == response  # Passes through unchanged
+
+    def test_empty_action_skips_validation(self):
+        """Verify empty action (chat mode) skips validation."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {"status": "success"}
+        result = _validate_llm_response(response, "")
+        assert result == response
+
+    def test_error_response_passes_through(self):
+        """Verify error responses are not blocked by validation."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {"status": "error", "error": "File not found"}
+        result = _validate_llm_response(response, "nexo_analyze_file")
+        assert result["error"] == "File not found"
+
+    def test_success_false_passes_through(self):
+        """Verify success=False responses pass through without validation."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {"success": False, "error": "Processing failed"}
+        result = _validate_llm_response(response, "nexo_analyze_file")
+        assert result["success"] is False
+
+    def test_mapping_with_needs_input_status_passes(self):
+        """Verify mapping with needs_input status passes without mappings check."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+
+        response = {
+            "status": "needs_input",
+            "missing_required_fields": [{"target_column": "part_number"}],
+        }
+        result = _validate_llm_response(response, "map_to_schema")
+        assert result["status"] == "needs_input"
+
+    def test_output_validation_error_is_recoverable(self, mock_cognitive_middleware):
+        """Verify output validation errors are marked as recoverable for Frontend retry."""
+        from agents.orchestrators.inventory_hub.main import _validate_llm_response
+        from shared.cognitive_error_handler import CognitiveError
+
+        response = {"status": "success"}  # Missing required fields
+        with pytest.raises(CognitiveError) as exc_info:
+            _validate_llm_response(response, "nexo_analyze_file")
+
+        error = exc_info.value
+        # BUG-020: Critical for Frontend "Tentar Novamente" button
+        assert error.recoverable is True

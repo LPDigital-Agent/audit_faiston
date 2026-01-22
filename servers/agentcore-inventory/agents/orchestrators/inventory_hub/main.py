@@ -1240,6 +1240,79 @@ def _validate_payload(payload: dict) -> str:
 
 
 @cognitive_sync_handler("inventory_hub")
+def _validate_llm_response(parsed_response: dict, action: str) -> dict:
+    """
+    Validate that LLM response contains required fields for the given action.
+
+    BUG-020: Prevents incomplete LLM responses from crashing the Frontend.
+    Raises ValueError if validation fails → triggers DebugAgent enrichment.
+
+    Args:
+        parsed_response: The JSON-parsed LLM response
+        action: The action that was requested (may be empty for chat)
+
+    Returns:
+        The validated response (pass-through if valid)
+
+    Raises:
+        ValueError: If required fields are missing or empty (enriched by DebugAgent)
+    """
+    status = parsed_response.get("status", "")
+
+    # Error responses pass through (let user see the error)
+    if status == "error" or parsed_response.get("success") is False:
+        return parsed_response
+
+    # nexo_analyze_file: MUST have 'sheets' or 'columns' AND non-empty
+    if action == "nexo_analyze_file":
+        has_sheets = "sheets" in parsed_response
+        has_columns = "columns" in parsed_response
+        sheets = parsed_response.get("sheets")
+        columns = parsed_response.get("columns")
+
+        # Check if required keys exist
+        if not has_sheets and not has_columns:
+            raise ValueError(
+                "O agente retornou uma análise incompleta: "
+                "não foi possível identificar as abas ou colunas do arquivo. "
+                f"Campos presentes na resposta: {list(parsed_response.keys())}"
+            )
+
+        # Validate non-empty (key exists but is empty array)
+        if has_sheets and (sheets is None or len(sheets) == 0):
+            raise ValueError(
+                "O agente identificou o arquivo mas retornou zero abas. "
+                "Verifique se o arquivo contém dados válidos."
+            )
+        if has_columns and (columns is None or len(columns) == 0):
+            raise ValueError(
+                "O agente identificou o arquivo mas retornou zero colunas. "
+                "Verifique se o arquivo contém dados válidos."
+            )
+
+    # map_to_schema: MUST have 'mappings' AND non-empty when status=success
+    elif action in ("map_to_schema", "schema_mapper"):
+        if status == "success":
+            mappings = parsed_response.get("mappings")
+
+            if mappings is None:
+                raise ValueError(
+                    "O agente retornou mapeamento incompleto: "
+                    "campo 'mappings' ausente mesmo com status de sucesso. "
+                    f"Campos presentes: {list(parsed_response.keys())}"
+                )
+
+            if len(mappings) == 0:
+                raise ValueError(
+                    "O agente não conseguiu mapear nenhuma coluna do arquivo. "
+                    "Verifique se as colunas correspondem ao schema esperado."
+                )
+
+    # Unknown actions: skip validation silently (preserve chat flexibility)
+    return parsed_response
+
+
+@cognitive_sync_handler("inventory_hub")
 def _handle_direct_action(action: str, payload: dict, user_id: str, session_id: str) -> dict:
     """
     Handle deterministic actions without LLM invocation.
@@ -1586,9 +1659,25 @@ def invoke(payload: dict, context) -> dict:
             # Try to parse as JSON if structured
             if isinstance(message, str) and message.strip().startswith("{"):
                 try:
-                    return json.loads(message)
+                    parsed = json.loads(message)
+                    # BUG-020: Validate required fields before returning
+                    action = payload.get("action", "")
+                    validated = _validate_llm_response(parsed, action)
+                    # BUG-020 v7 FIX: Wrap in OrchestratorEnvelope format
+                    # Frontend expects: { success, specialist_agent, response }
+                    # Without this wrapper, extractAgentCoreResponse() doesn't unwrap
+                    # and hasValidAnalysisData() checks the outer envelope instead of inner response
+                    return {
+                        "success": True,
+                        "specialist_agent": "llm",
+                        "response": validated,
+                        "agent_id": AGENT_ID,
+                    }
                 except json.JSONDecodeError:
                     pass
+                except ValueError:
+                    # Validation failed - re-raise to be caught by outer except
+                    raise
             return {
                 "success": True,
                 "response": message,
@@ -1609,11 +1698,14 @@ def invoke(payload: dict, context) -> dict:
         return {
             "success": False,
             "error": str(e),
+            "technical_error": str(e),
             "agent_id": AGENT_ID,
             "error_context": {
                 "error_type": type(e).__name__,
                 "operation": "inventory_hub_invoke",
-                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+                # BUG-020: ValueError (validation errors) are recoverable - user can retry
+                # CRITICAL: Enables "Tentar Novamente" button in Frontend
+                "recoverable": isinstance(e, (ValueError, TimeoutError, ConnectionError, OSError)),
             },
         }
 
