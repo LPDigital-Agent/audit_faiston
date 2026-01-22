@@ -362,12 +362,22 @@ class HILWorkflowManager:
 
         task = self.get_task(task_id)
         if not task:
-            return {"success": False, "error": f"Task {task_id} not found"}
+            # AUDIT-028: Structured error response with user-friendly message
+            return {
+                "success": False,
+                "error": f"Task {task_id} not found",
+                "human_explanation": "A tarefa solicitada não foi encontrada no sistema.",
+                "suggested_fix": "Verifique o ID da tarefa ou liste as tarefas pendentes primeiro.",
+                "recoverable": False,
+            }
 
         if task["status"] != HILTaskStatus.PENDING:
             return {
                 "success": False,
                 "error": f"Task is not pending. Status: {task['status']}",
+                "human_explanation": "Esta tarefa não está mais pendente de aprovação.",
+                "suggested_fix": "A tarefa pode já ter sido processada. Verifique o histórico.",
+                "recoverable": False,
             }
 
         now = now_iso()
@@ -449,12 +459,22 @@ class HILWorkflowManager:
 
         task = self.get_task(task_id)
         if not task:
-            return {"success": False, "error": f"Task {task_id} not found"}
+            # AUDIT-028: Structured error response with user-friendly message
+            return {
+                "success": False,
+                "error": f"Task {task_id} not found",
+                "human_explanation": "A tarefa solicitada não foi encontrada no sistema.",
+                "suggested_fix": "Verifique o ID da tarefa ou liste as tarefas pendentes primeiro.",
+                "recoverable": False,
+            }
 
         if task["status"] != HILTaskStatus.PENDING:
             return {
                 "success": False,
                 "error": f"Task is not pending. Status: {task['status']}",
+                "human_explanation": "Esta tarefa não está mais pendente de aprovação.",
+                "suggested_fix": "A tarefa pode já ter sido processada. Verifique o histórico.",
+                "recoverable": False,
             }
 
         now = now_iso()
@@ -526,7 +546,14 @@ class HILWorkflowManager:
 
         task = self.get_task(task_id)
         if not task:
-            return {"success": False, "error": f"Task {task_id} not found"}
+            # AUDIT-028: Structured error response with user-friendly message
+            return {
+                "success": False,
+                "error": f"Task {task_id} not found",
+                "human_explanation": "A tarefa solicitada não foi encontrada no sistema.",
+                "suggested_fix": "Verifique o ID da tarefa ou liste as tarefas pendentes primeiro.",
+                "recoverable": False,
+            }
 
         now = now_iso()
         table_name = os.environ.get(

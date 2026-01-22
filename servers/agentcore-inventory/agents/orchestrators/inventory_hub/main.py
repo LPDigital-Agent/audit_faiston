@@ -1213,6 +1213,33 @@ DIRECT_ACTIONS = {"get_nf_upload_url", "verify_file"}
 
 
 @cognitive_sync_handler("inventory_hub")
+def _validate_payload(payload: dict) -> str:
+    """
+    Validate request payload and extract prompt for Mode 2 (LLM path).
+
+    Raises ValueError if payload is missing required fields, which triggers
+    DebugAgent enrichment via @cognitive_sync_handler decorator.
+
+    Args:
+        payload: Request payload with 'prompt' or 'action' field
+
+    Returns:
+        The prompt string for LLM processing
+
+    Raises:
+        ValueError: If both 'prompt' and 'action' are missing (enriched by DebugAgent)
+    """
+    prompt = payload.get("prompt", payload.get("message", ""))
+    if not prompt:
+        raise ValueError(
+            "O payload da requisição está vazio ou inválido. "
+            "Faltam os campos 'prompt' ou 'action'. "
+            "Envie uma mensagem de texto ou especifique uma ação válida."
+        )
+    return prompt
+
+
+@cognitive_sync_handler("inventory_hub")
 def _handle_direct_action(action: str, payload: dict, user_id: str, session_id: str) -> dict:
     """
     Handle deterministic actions without LLM invocation.
@@ -1242,11 +1269,7 @@ def _handle_direct_action(action: str, payload: dict, user_id: str, session_id: 
     elif action == "verify_file":
         return _handle_verify_file(payload)
     else:
-        return {
-            "success": False,
-            "error": f"Unknown direct action: {action}",
-            "specialist_agent": "intake",
-        }
+        raise ValueError(f"Ação desconhecida: '{action}'. Ações válidas: {', '.join(DIRECT_ACTIONS)}")
 
 
 @cognitive_sync_handler("inventory_hub")
@@ -1281,28 +1304,15 @@ def _handle_get_nf_upload_url(payload: dict, user_id: str, session_id: str) -> d
 
     filename = payload.get("filename")
     if not filename:
-        return {
-            "success": False,
-            "error": "Missing required parameter: filename",
-            "specialist_agent": "intake",
-        }
+        raise ValueError("O nome do arquivo é obrigatório para gerar o link de upload")
 
     # Validate extension
     if "." not in filename:
-        return {
-            "success": False,
-            "error": f"Filename '{filename}' has no extension",
-            "specialist_agent": "intake",
-        }
+        raise ValueError(f"O arquivo '{filename}' não possui extensão. Informe o nome completo (ex: planilha.xlsx)")
 
     extension = filename.rsplit(".", 1)[1].lower()
     if extension not in ALLOWED_FILE_TYPES:
-        return {
-            "success": False,
-            "error": f"File type '.{extension}' not allowed",
-            "allowed_types": list(ALLOWED_FILE_TYPES.keys()),
-            "specialist_agent": "intake",
-        }
+        raise ValueError(f"Tipo de arquivo '.{extension}' não permitido. Formatos aceitos: {', '.join(ALLOWED_FILE_TYPES.keys())}")
 
     content_type = payload.get("content_type") or ALLOWED_FILE_TYPES.get(
         extension, "application/octet-stream"
@@ -1334,20 +1344,12 @@ def _handle_get_nf_upload_url(payload: dict, user_id: str, session_id: str) -> d
     )
 
     if not result.get("success"):
-        return {
-            "success": False,
-            "error": result.get("error", "Failed to generate URL"),
-            "specialist_agent": "intake",
-        }
+        raise RuntimeError(f"Falha ao gerar URL de upload no S3: {result.get('error', 'erro desconhecido')}")
 
     # Verify tenant isolation (defense in depth)
     if not s3_key.startswith(f"uploads/{user_id}/"):
         logger.error(f"[InventoryHub] Security violation: s3_key={s3_key} not namespaced to user={user_id}")
-        return {
-            "success": False,
-            "error": "Security violation: path not namespaced",
-            "specialist_agent": "intake",
-        }
+        raise PermissionError("Violação de segurança: caminho de upload não autorizado para este usuário")
 
     logger.info(f"[InventoryHub] Mode 2.5 upload URL generated: s3_key={s3_key}")
 
@@ -1395,21 +1397,13 @@ def _handle_verify_file(payload: dict) -> dict:
 
     s3_key = payload.get("s3_key")
     if not s3_key:
-        return {
-            "success": False,
-            "error": "Missing required parameter: s3_key",
-            "specialist_agent": "intake",
-        }
+        raise ValueError("O parâmetro 's3_key' é obrigatório para verificar o arquivo")
 
     s3_client = SGAS3Client()
     result = s3_client.get_file_metadata(key=s3_key, retry_count=3, retry_delay=1.0)
 
     if not result.get("success"):
-        return {
-            "success": False,
-            "error": result.get("error", "Failed to verify file"),
-            "specialist_agent": "intake",
-        }
+        raise RuntimeError(f"Falha ao verificar arquivo no S3: {result.get('error', 'arquivo não encontrado')}")
 
     return {
         "success": True,
@@ -1558,10 +1552,17 @@ def invoke(payload: dict, context) -> dict:
                 }
 
         # Mode 2: Natural language processing via LLM
-        if not prompt:
+        # Validate payload with DebugAgent enrichment for user-friendly error messages
+        try:
+            prompt = _validate_payload(payload)
+        except CognitiveError as e:
+            # Error enriched by DebugAgent - return structured response with user-friendly message
+            logger.warning(f"[InventoryHub] CognitiveError in payload validation: {e.technical_message}")
             return {
                 "success": False,
-                "error": "Missing 'prompt' or 'action' in request",
+                "error": e.human_explanation,
+                "technical_error": e.technical_message,
+                "suggested_fix": e.suggested_fix,
                 "usage": {
                     "prompt": "Natural language request (e.g., 'Quero fazer upload de um arquivo CSV')",
                     "action": f"Action name (health_check, {', '.join(DIRECT_ACTIONS)})",

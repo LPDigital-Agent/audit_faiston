@@ -450,7 +450,15 @@ async def store_resolution(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] store_resolution failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # AUDIT-028: Debug agent provides its own graceful fallback
+        # (Cannot use cognitive_error_handler - would cause infinite loop)
+        return {
+            "success": False,
+            "error": str(e),
+            "human_explanation": "Erro ao armazenar resolução no sistema de aprendizado.",
+            "suggested_fix": "A resolução será aplicada, mas não será salva para aprendizado futuro.",
+            "recoverable": True,
+        }
 
 
 @tool

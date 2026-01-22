@@ -37,6 +37,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirna
 from agents.tools.analysis_tools import get_file_structure, validate_file_columns
 from agents.utils import create_gemini_model
 
+# AUDIT-028: Cognitive Error Handler for enriched error responses
+from shared.cognitive_error_handler import cognitive_sync_handler, CognitiveError
+from shared.debug_utils import debug_error
+
 # Note: FileAnalystResponse exists in shared.agent_schemas but not used here
 # because this agent returns raw tool JSON output (Technical Data Engineer persona)
 # The schema is available for downstream processing if needed

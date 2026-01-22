@@ -713,7 +713,13 @@ class SGAPostgresClient:
         pn_query = "SELECT part_number_id FROM sga.part_numbers WHERE part_number = %s"
         pn_result = self._execute_query(pn_query, (part_number,))
         if not pn_result:
-            return {"error": f"Part number not found: {part_number}"}
+            # AUDIT-028: Structured error response with user-friendly message
+            return {
+                "error": f"Part number not found: {part_number}",
+                "human_explanation": f"O part number '{part_number}' não foi encontrado no cadastro.",
+                "suggested_fix": "Verifique se o código está correto ou cadastre o part number primeiro.",
+                "recoverable": False,
+            }
         part_number_id = pn_result[0]["part_number_id"]
 
         source_id = None

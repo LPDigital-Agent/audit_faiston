@@ -425,8 +425,15 @@ def handle_get_schema_metadata(arguments: Dict[str, Any]) -> Dict[str, Any]:
         )
         return metadata
     except Exception as e:
-        debug_error(e, "postgres_tools_get_schema_metadata", {})
-        return {"error": str(e)}
+        # AUDIT-028: Use enrichment from Debug Agent in response
+        enrichment = debug_error(e, "postgres_tools_get_schema_metadata", {})
+        analysis = enrichment.get("analysis", {}) if enrichment.get("enriched") else {}
+        return {
+            "error": str(e),
+            "human_explanation": analysis.get("human_explanation", "Erro ao consultar metadados do schema."),
+            "suggested_fix": analysis.get("suggested_fix", "Verifique a conexão com o banco de dados."),
+            "debug_analysis": analysis,
+        }
 
 
 def handle_get_table_columns(arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -462,8 +469,15 @@ def handle_get_table_columns(arguments: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"Retrieved {len(columns)} columns for {schema_name}.{table_name}")
         return {"columns": columns, "table_name": table_name, "schema_name": schema_name}
     except Exception as e:
-        debug_error(e, "postgres_tools_get_table_columns", {"table_name": table_name, "schema_name": schema_name})
-        return {"error": str(e)}
+        # AUDIT-028: Use enrichment from Debug Agent in response
+        enrichment = debug_error(e, "postgres_tools_get_table_columns", {"table_name": table_name, "schema_name": schema_name})
+        analysis = enrichment.get("analysis", {}) if enrichment.get("enriched") else {}
+        return {
+            "error": str(e),
+            "human_explanation": analysis.get("human_explanation", "Erro ao consultar colunas da tabela."),
+            "suggested_fix": analysis.get("suggested_fix", "Verifique se a tabela existe."),
+            "debug_analysis": analysis,
+        }
 
 
 def handle_get_enum_values(arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -491,8 +505,15 @@ def handle_get_enum_values(arguments: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"Retrieved {len(values)} values for enum {enum_name}")
         return {"enum_name": enum_name, "values": values}
     except Exception as e:
-        debug_error(e, "postgres_tools_get_enum_values", {"enum_name": enum_name})
-        return {"error": str(e)}
+        # AUDIT-028: Use enrichment from Debug Agent in response
+        enrichment = debug_error(e, "postgres_tools_get_enum_values", {"enum_name": enum_name})
+        analysis = enrichment.get("analysis", {}) if enrichment.get("enriched") else {}
+        return {
+            "error": str(e),
+            "human_explanation": analysis.get("human_explanation", "Erro ao consultar valores do enum."),
+            "suggested_fix": analysis.get("suggested_fix", "Verifique se o enum existe."),
+            "debug_analysis": analysis,
+        }
 
 
 # =============================================================================
@@ -575,12 +596,21 @@ def handle_create_column(arguments: Dict[str, Any]) -> Dict[str, Any]:
         return result
 
     except Exception as e:
-        debug_error(e, "postgres_tools_create_column", {"table_name": table_name, "column_name": column_name, "column_type": column_type})
+        # AUDIT-028: Use enrichment from Debug Agent in response
+        enrichment = debug_error(e, "postgres_tools_create_column", {
+            "table_name": arguments.get("table_name", "pending_entry_items"),
+            "column_name": column_name,
+            "column_type": arguments.get("column_type", "TEXT"),
+        })
+        analysis = enrichment.get("analysis", {}) if enrichment.get("enriched") else {}
         return {
             "success": False,
             "error": "unexpected_error",
             "message": str(e),
             "use_metadata_fallback": True,
+            "human_explanation": analysis.get("human_explanation", "Erro ao criar coluna no banco de dados."),
+            "suggested_fix": analysis.get("suggested_fix", "Verifique as permissões e tente novamente."),
+            "debug_analysis": analysis,
         }
 
 

@@ -238,13 +238,20 @@ def debug_error(
     Example:
         from shared.debug_utils import debug_error
 
-        # AUDIT-003: Use this INSTEAD OF logger.error()
+        # AUDIT-028: Use enrichment result in error response
         try:
             response = requests.get(url)
             response.raise_for_status()
         except requests.HTTPError as e:
-            debug_error(e, "http_request", {"url": url})
-            return {"success": False, "error": str(e)}
+            enrichment = debug_error(e, "http_request", {"url": url})
+            analysis = enrichment.get("analysis", {}) if enrichment.get("enriched") else {}
+            return {
+                "success": False,
+                "error": str(e),
+                "human_explanation": analysis.get("human_explanation", "Erro na requisição HTTP."),
+                "suggested_fix": analysis.get("suggested_fix", "Verifique a conexão e tente novamente."),
+                "debug_analysis": analysis,
+            }
     """
     try:
         # Check if we're already in an async context

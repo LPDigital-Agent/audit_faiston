@@ -54,6 +54,9 @@ from shared.hooks.debug_hook import DebugHook
 # AUDIT-003: Global error capture for Debug Agent enrichment
 from shared.debug_utils import debug_error
 
+# AUDIT-028: Cognitive Error Handler for enriched error responses
+from shared.cognitive_error_handler import cognitive_sync_handler, CognitiveError
+
 # Schema introspection (uses MCP Gateway internally)
 from tools.schema_provider import SchemaProvider, get_schema_provider
 
