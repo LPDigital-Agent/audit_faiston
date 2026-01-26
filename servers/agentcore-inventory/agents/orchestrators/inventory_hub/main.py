@@ -359,5 +359,29 @@ __all__ = [
 ]
 
 
+# =============================================================================
+# CRITICAL: Start the AgentCore Runtime listener (BUG-033 Part 4 FIX)
+# =============================================================================
+# BedrockAgentCoreApp.run() MUST be called to start the event listener.
+# In AgentCore Firecracker runtime, modules are IMPORTED (not run as __main__),
+# so this must execute at module level, NOT inside if __name__ == "__main__".
+#
+# When the module is loaded:
+# 1. app = BedrockAgentCoreApp() creates the app (line 126)
+# 2. @app.entrypoint registers the invoke() handler (line 129)
+# 3. app.run() starts the listener waiting for AgentCore events
+# =============================================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+logger.info(f"[InventoryHub] Starting AgentCore Runtime listener for {AGENT_NAME}...")
+
+# CRITICAL: This MUST run to start the listener in BOTH Dev and Prod
+app.run()
+
+
 if __name__ == "__main__":
     app.run()

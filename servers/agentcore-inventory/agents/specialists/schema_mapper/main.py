@@ -44,13 +44,13 @@
 # AgentCore deploys to /var/task but nested package imports can fail.
 #
 # File location: /var/task/agents/specialists/schema_mapper/main.py
-# Project root: /var/task (3 levels up from containing directory)
+# Project root: /var/task (4 levels up: main.py → schema_mapper → specialists → agents → root)
 # =============================================================================
 import sys
 import os
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
-_project_root = os.path.abspath(os.path.join(_current_dir, "../../.."))
+_project_root = os.path.abspath(os.path.join(_current_dir, "../../../.."))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 # =============================================================================
@@ -729,7 +729,7 @@ def invoke(payload: dict, context) -> dict:
         session_id = payload.get("session_id", "unknown")
         logger.info(f"[SchemaMapper] Invoked with keys: {list(payload.keys())}, session={session_id}")
 
-        # Initialize agent
+        # Initialize Strands Agent (lazy loading per request)
         agent = create_agent()
 
         # Invoke agent with the full payload (Mode 2: LLM reasoning)
@@ -745,56 +745,36 @@ def invoke(payload: dict, context) -> dict:
             return {"success": True, "response": str(response)}
 
     except Exception as e:
-        logger.exception(f"[SchemaMapper] Error in invoke: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "agent_id": AGENT_ID,
-        }
+        # Log full stack trace for debugging
+        logger.error(f"[SchemaMapper] Error in invoke: {str(e)}", exc_info=True)
+        # Re-raise so AgentCore runtime can handle serialization
+        raise
 
 
 # =============================================================================
-# Local Development Entrypoint (NOT for AgentCore deployment)
+# CRITICAL: Start the AgentCore Runtime listener
+# =============================================================================
+# BedrockAgentCoreApp.run() MUST be called to start the event listener.
+# In AgentCore Firecracker runtime, modules are IMPORTED (not run as __main__),
+# so this must execute at module level, NOT inside if __name__ == "__main__".
+#
+# When the module is loaded:
+# 1. app = BedrockAgentCoreApp() creates the app
+# 2. @app.entrypoint registers the invoke() handler
+# 3. app.run() starts the listener waiting for AgentCore events
 # =============================================================================
 
+# Configure logging before starting
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
-def main() -> None:
-    """
-    Start the SchemaMapper for LOCAL DEVELOPMENT ONLY.
+logger.info(f"[SchemaMapper] Starting AgentCore Runtime listener for {AGENT_NAME}...")
 
-    This function uses FastAPI/uvicorn for local testing.
-    In AgentCore deployment, the BedrockAgentCoreApp.entrypoint is used instead.
-
-    For local development:
-        cd server/agentcore-inventory
-        python -m agents.specialists.schema_mapper.main
-
-    For AgentCore deployment:
-        # The @app.entrypoint decorator handles invocations automatically
-        agentcore deploy --profile faiston-aio
-    """
-    from fastapi import FastAPI
-    import uvicorn
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
-    logger.info(f"[SchemaMapper] Starting LOCAL A2A server on port {AGENT_PORT}...")
-
-    fastapi_app = FastAPI(title=AGENT_NAME, version=AGENT_VERSION)
-
-    @fastapi_app.get("/ping")
-    async def ping():
-        return {"status": "healthy", "agent": AGENT_ID, "version": AGENT_VERSION}
-
-    agent = create_agent()
-    a2a_server = create_a2a_server(agent)
-    fastapi_app.mount("/", a2a_server.to_fastapi_app())
-
-    logger.info(f"[SchemaMapper] Starting uvicorn server on 0.0.0.0:{AGENT_PORT}")
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=AGENT_PORT)
+# CRITICAL: This MUST run to start the listener in BOTH Dev and Prod
+# The SDK typically listens on 0.0.0.0:9000 by default
+app.run()
 
 
 # =============================================================================
@@ -809,10 +789,4 @@ __all__ = [
     "create_a2a_server",
     "app",  # BedrockAgentCoreApp instance
     "invoke",  # Entrypoint function
-    "main",  # Local dev only
 ]
-
-
-if __name__ == "__main__":
-    # Local development mode - use uvicorn
-    main()
