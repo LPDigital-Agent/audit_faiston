@@ -30,18 +30,40 @@
 # MODEL:
 # - Gemini 2.5 Pro + Thinking (critical inventory agent per CLAUDE.md)
 #
-# VERSION: 2026-01-21T21:00:00Z (Phase 3 initial)
+# RUNTIME:
+# - AWS Bedrock AgentCore (Firecracker) - uses BedrockAgentCoreApp pattern
+# - NOT uvicorn/FastAPI (those don't work in serverless Firecracker runtime)
+#
+# VERSION: 2026-01-26T22:30:00Z (AgentCore Runtime adaptation)
+# =============================================================================
+
+# =============================================================================
+# BUG-033 FIX: sys.path fix for AgentCore Runtime
+# =============================================================================
+# MUST be at the very top, BEFORE any shared.* or tools.* imports.
+# AgentCore deploys to /var/task but nested package imports can fail.
+#
+# File location: /var/task/agents/specialists/schema_mapper/main.py
+# Project root: /var/task (3 levels up from containing directory)
+# =============================================================================
+import sys
+import os
+
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.abspath(os.path.join(_current_dir, "../../.."))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 # =============================================================================
 
 import asyncio
 import json
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
 from a2a.types import AgentSkill
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 # Agent utilities
 from agents.utils import create_gemini_model, create_agent_skill, AGENT_VERSION
@@ -660,56 +682,119 @@ def create_a2a_server(agent: Agent) -> A2AServer:
 
 
 # =============================================================================
-# Main Entrypoint
+# AgentCore Runtime Entrypoint
+# =============================================================================
+# AWS Bedrock AgentCore uses Firecracker (serverless microVM) runtime.
+# It does NOT support persistent web servers (uvicorn/FastAPI).
+# Instead, it uses the BedrockAgentCoreApp pattern with @app.entrypoint.
+# =============================================================================
+
+app = BedrockAgentCoreApp()
+
+
+@app.entrypoint
+def invoke(payload: dict, context) -> dict:
+    """
+    Main entrypoint for AgentCore Runtime (Firecracker).
+
+    This handler receives requests from the AgentCore runtime and routes them
+    to the SchemaMapper agent for semantic column mapping.
+
+    Args:
+        payload: Request payload containing:
+            - action: "health_check" for system status
+            - source_columns: List of column names from the uploaded file
+            - sample_data: Sample values for each column (for inference)
+            - session_id: Import session identifier
+        context: AgentCore context with session_id, identity
+
+    Returns:
+        Response dict with mapping proposal or health status.
+    """
+    try:
+        # Handle health check (Mode 1: no LLM)
+        action = payload.get("action", "")
+        if action == "health_check":
+            logger.info("[SchemaMapper] Health check requested")
+            return {
+                "success": True,
+                "status": "healthy",
+                "agent_id": AGENT_ID,
+                "agent_name": AGENT_NAME,
+                "version": AGENT_VERSION,
+                "runtime_id": RUNTIME_ID,
+            }
+
+        # Extract context
+        session_id = payload.get("session_id", "unknown")
+        logger.info(f"[SchemaMapper] Invoked with keys: {list(payload.keys())}, session={session_id}")
+
+        # Initialize agent
+        agent = create_agent()
+
+        # Invoke agent with the full payload (Mode 2: LLM reasoning)
+        # The agent will use get_target_schema, observe_prior_patterns, etc.
+        response = agent(payload)
+
+        # Extract response from Strands Agent result
+        if hasattr(response, "message"):
+            return {"success": True, "response": response.message}
+        elif isinstance(response, dict):
+            return response
+        else:
+            return {"success": True, "response": str(response)}
+
+    except Exception as e:
+        logger.exception(f"[SchemaMapper] Error in invoke: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "agent_id": AGENT_ID,
+        }
+
+
+# =============================================================================
+# Local Development Entrypoint (NOT for AgentCore deployment)
 # =============================================================================
 
 
 def main() -> None:
     """
-    Start the SchemaMapper A2A server.
+    Start the SchemaMapper for LOCAL DEVELOPMENT ONLY.
+
+    This function uses FastAPI/uvicorn for local testing.
+    In AgentCore deployment, the BedrockAgentCoreApp.entrypoint is used instead.
 
     For local development:
         cd server/agentcore-inventory
         python -m agents.specialists.schema_mapper.main
 
     For AgentCore deployment:
+        # The @app.entrypoint decorator handles invocations automatically
         agentcore deploy --profile faiston-aio
     """
-    # Import FastAPI and uvicorn here to avoid circular imports
     from fastapi import FastAPI
     import uvicorn
 
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    logger.info(f"[SchemaMapper] Starting A2A server on port {AGENT_PORT}...")
+    logger.info(f"[SchemaMapper] Starting LOCAL A2A server on port {AGENT_PORT}...")
 
-    # Create FastAPI app
-    app = FastAPI(title=AGENT_NAME, version=AGENT_VERSION)
+    fastapi_app = FastAPI(title=AGENT_NAME, version=AGENT_VERSION)
 
-    # Add /ping health endpoint for AWS ALB
-    @app.get("/ping")
+    @fastapi_app.get("/ping")
     async def ping():
-        """Health check endpoint for AWS Application Load Balancer."""
-        return {
-            "status": "healthy",
-            "agent": AGENT_ID,
-            "version": AGENT_VERSION,
-        }
+        return {"status": "healthy", "agent": AGENT_ID, "version": AGENT_VERSION}
 
-    # Create agent and A2A server
     agent = create_agent()
     a2a_server = create_a2a_server(agent)
+    fastapi_app.mount("/", a2a_server.to_fastapi_app())
 
-    # Mount A2A server at root
-    app.mount("/", a2a_server.to_fastapi_app())
-
-    # Start server with uvicorn
     logger.info(f"[SchemaMapper] Starting uvicorn server on 0.0.0.0:{AGENT_PORT}")
-    uvicorn.run(app, host="0.0.0.0", port=AGENT_PORT)
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=AGENT_PORT)
 
 
 # =============================================================================
@@ -722,9 +807,12 @@ __all__ = [
     "AGENT_PORT",
     "create_agent",
     "create_a2a_server",
-    "main",
+    "app",  # BedrockAgentCoreApp instance
+    "invoke",  # Entrypoint function
+    "main",  # Local dev only
 ]
 
 
 if __name__ == "__main__":
+    # Local development mode - use uvicorn
     main()
