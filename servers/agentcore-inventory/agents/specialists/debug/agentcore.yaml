@@ -1,0 +1,83 @@
+# =============================================================================
+# AgentCore Deployment Configuration - DebugAgent (Error Analysis Specialist)
+# =============================================================================
+# Purpose: Intelligent error analysis with root cause identification
+#
+# TRIGGER: @cognitive_error_handler decorator intercepts errors and routes here
+#
+# CAPABILITIES:
+# 1. Analyze error messages with root cause identification
+# 2. Search documentation via MCP gateways
+# 3. Query historical patterns from AgentCore Memory
+# 4. Store successful resolutions for future reference
+# 5. Recommend repair actions when appropriate
+#
+# INTEGRATION:
+# - Receives errors from: @cognitive_error_handler() decorated functions
+# - Sends to RepairAgent when: suggested_action == "repair"
+# - Returns enriched analysis to: calling agent for logging
+#
+# NOTE: DebugAgent itself does NOT use @cognitive_error_handler
+# (would cause infinite loop - see cognitive_error_handler.py:494)
+#
+# Deploy command:
+#   cd server/agentcore-inventory/agents/specialists/debug
+#   agentcore deploy --profile faiston-aio
+#
+# Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/api-reference/cli.html
+# =============================================================================
+
+# Runtime configuration
+runtime:
+  id: faiston_sga_debug
+  description: "DebugAgent - Intelligent Error Analysis Specialist"
+
+  # Memory configuration (STM for session patterns, LTM for historical patterns)
+  memory:
+    type: stm  # Short-term memory for active debugging sessions
+
+  # Network configuration
+  port: 9000
+
+  # Scaling (always available for errors)
+  scaling:
+    min_instances: 1  # Keep at least 1 warm for immediate error handling
+    max_instances: 5  # Scale for concurrent error analysis
+
+  # Timeout settings (Error analysis with LLM reasoning)
+  timeout:
+    invoke_timeout_seconds: 120  # 2 minutes for thorough analysis
+
+  # Health check
+  health_check:
+    path: /health
+    interval_seconds: 30
+
+# Environment variables
+environment:
+  # AWS Configuration
+  AWS_REGION: us-east-2
+  AWS_ACCOUNT_ID: "377311924364"
+
+  # S3 Bucket for documents
+  DOCUMENTS_BUCKET: faiston-one-sga-documents-prod
+
+  # Logging level
+  LOG_LEVEL: INFO
+
+  # Memory namespace for error patterns
+  MEMORY_NAMESPACE: /strategy/debug/error_patterns
+
+# Agent metadata
+metadata:
+  name: DebugAgent
+  version: "2026-01-23"
+  phase: "error-analysis"
+  owner: "faiston-sga-team"
+  tags:
+    - infrastructure
+    - error-analysis
+    - debugging
+    - gemini-pro
+    - thinking-mode
+    - nexo-immune-system

@@ -393,6 +393,9 @@ def analyze_patterns(
             "learning_mode_applied": true,
             "human_message": "Encontrei 8 padrões: 3 erros, 4 mapeamentos, 1 comportamento."
         }
+
+    Raises:
+        json.JSONDecodeError: If activity_json contains invalid JSON (caught internally, returns JSON error response).
     """
     try:
         # Parse activity data

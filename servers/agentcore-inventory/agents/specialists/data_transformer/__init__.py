@@ -21,7 +21,7 @@ Author: Faiston NEXO Team
 Date: January 2026
 """
 
-from .main import (
+from agents.specialists.data_transformer.main import (
     AGENT_ID,
     AGENT_NAME,
     AGENT_PORT,

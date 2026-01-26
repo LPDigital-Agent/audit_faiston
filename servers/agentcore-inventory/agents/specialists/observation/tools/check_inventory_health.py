@@ -255,6 +255,9 @@ def check_inventory_health(actor_id: str) -> str:
             ],
             "human_message": "Saúde do inventário: 85% (bom). 2 problemas críticos detectados."
         }
+
+    Raises:
+        Exception: If database connection fails (caught internally, returns JSON error response with DATABASE_ERROR type).
     """
     try:
         # Import postgres client

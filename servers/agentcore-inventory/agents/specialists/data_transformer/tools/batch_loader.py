@@ -29,6 +29,9 @@ from shared.env_config import get_required_env
 
 logger = logging.getLogger(__name__)
 
+# Agent ID for cognitive error routing (matches parent agent)
+AGENT_ID = "data_transformer"
+
 # Batch configuration
 BATCH_SIZE = 500  # Rows per MCP call
 
@@ -68,6 +71,10 @@ def insert_pending_items_batch(
         - inserted_count: int
         - error_count: int
         - errors: List of row-level insertion errors
+
+    Raises:
+        json.JSONDecodeError: If rows_json contains invalid JSON (caught internally).
+        MCPGatewayError: If MCP Gateway call fails (caught internally).
     """
     try:
         rows = json.loads(rows_json)
@@ -166,6 +173,10 @@ def insert_all_batches(
 
     Returns:
         JSON string with aggregated results across all batches.
+
+    Raises:
+        json.JSONDecodeError: If batches_json contains invalid JSON (caught internally).
+        MCPGatewayError: If MCP Gateway batch insert fails (caught internally).
     """
     try:
         batches = json.loads(batches_json)
@@ -266,6 +277,11 @@ def generate_rejection_report(
 
     Returns:
         JSON string with presigned_url for report download.
+
+    Raises:
+        json.JSONDecodeError: If errors_json or enriched_errors_json is invalid (caught internally).
+        botocore.exceptions.ClientError: If S3 upload or presigned URL generation fails (caught internally).
+        EnvironmentError: If DOCUMENTS_BUCKET env var is missing (FAIL-CLOSED).
     """
     import boto3
     from datetime import datetime, timezone

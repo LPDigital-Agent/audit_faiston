@@ -67,6 +67,9 @@ async def query_memory_patterns_tool(
 
     Returns:
         Similar patterns with resolutions and success rates
+
+    Raises:
+        MemoryError: If AgentCore Memory query fails (caught internally, returns empty patterns).
     """
     logger.info(f"[query_memory_patterns] Signature: {error_signature[:16]}...")
 

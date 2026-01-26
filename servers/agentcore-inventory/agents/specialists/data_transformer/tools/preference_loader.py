@@ -22,6 +22,9 @@ from shared.memory_manager import AgentMemoryManager, MemoryOriginType
 
 logger = logging.getLogger(__name__)
 
+# Agent ID for cognitive error routing (matches parent agent)
+AGENT_ID = "data_transformer"
+
 # Default strategy when no preference exists
 DEFAULT_STRATEGY = "LOG_AND_CONTINUE"
 
@@ -50,6 +53,9 @@ def load_import_preferences(user_id: str, session_id: str = "") -> str:
         - source: "memory" | "system_default"
         - first_import: bool (True if no prior preference)
         - notification_preference: str | None
+
+    Raises:
+        MemoryAPIError: If AgentCore Memory query fails (graceful degradation to default).
     """
     try:
         memory_manager = AgentMemoryManager()
@@ -132,6 +138,10 @@ def save_import_preference(
 
     Returns:
         JSON string with success status and memory_id.
+
+    Raises:
+        ValueError: If strategy is not STOP_ON_ERROR or LOG_AND_CONTINUE (returned as error JSON).
+        MemoryAPIError: If AgentCore Memory save fails (caught internally).
     """
     # Validate strategy
     valid_strategies = ["STOP_ON_ERROR", "LOG_AND_CONTINUE"]

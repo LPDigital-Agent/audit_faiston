@@ -130,7 +130,7 @@ async def _enrich_with_debug_agent(
         Falls back to basic info if DebugAgent unavailable.
     """
     # Import here to avoid circular imports
-    from shared.a2a_client import A2AClient
+    from shared.strands_a2a_client import A2AClient
 
     # Check circuit breaker
     if not _debug_circuit.can_execute():
@@ -304,7 +304,7 @@ async def _invoke_repair_agent(
             ...
         }
     """
-    from shared.a2a_client import A2AClient
+    from shared.strands_a2a_client import A2AClient
 
     try:
         client = A2AClient()
@@ -364,114 +364,6 @@ async def _invoke_repair_agent(
         logger.error(f"[CognitiveMiddleware] Error invoking RepairAgent: {e}")
         return {
             "fix_applied": False,
-            "error": str(e),
-        }
-
-
-async def _invoke_code_review_agent(
-    repair_result: Dict[str, Any],
-    session_id: Optional[str] = None,
-    timeout: float = 180.0,  # 3 minutes for code review (AST + security + coverage)
-) -> Dict[str, Any]:
-    """
-    Invoke CodeReviewerAgent to review DRAFT PR created by RepairAgent.
-
-    This function is called by cognitive_error_handler after RepairAgent
-    successfully creates a DRAFT PR. The Code Review Agent acts as a Red Team
-    adversary to catch issues before human review.
-
-    Args:
-        repair_result: RepairAgent result dict containing pr_number, pr_url, branch_name
-        session_id: Session ID for tracing
-        timeout: Max time for code review operations
-
-    Returns:
-        Review result dict with review_posted, severity, findings, etc.
-        {
-            "success": bool,
-            "review_posted": bool,
-            "pr_number": int,
-            "pr_url": str,
-            "severity": str,  # "pass", "info", "warning", "critical"
-            "critical_count": int,
-            "warning_count": int,
-            "info_count": int,
-            "findings": list,
-            "human_message": str,
-            "error": str | None,
-            ...
-        }
-    """
-    from shared.a2a_client import A2AClient
-
-    try:
-        client = A2AClient()
-
-        # Extract PR details from repair result
-        pr_number = repair_result.get("pr_number", 0)
-        pr_url = repair_result.get("pr_url", "")
-        branch_name = repair_result.get("branch_name", "")
-
-        # Build CodeReviewerAgent payload
-        review_payload = {
-            "action": "review_pr",
-            "pr_number": pr_number,
-            "pr_url": pr_url,
-            "branch_name": branch_name,
-            "base_branch": repair_result.get("base_branch", "main"),
-            "changed_files": repair_result.get("changed_files", []),
-        }
-
-        logger.info(
-            f"[CognitiveMiddleware] Invoking CodeReviewerAgent for PR #{pr_number}: "
-            f"{pr_url}"
-        )
-
-        # Invoke CodeReviewerAgent
-        result = await client.invoke_agent(
-            agent_id="code_reviewer",
-            payload=review_payload,
-            session_id=session_id,
-            timeout=timeout,
-        )
-
-        if result.success:
-            import json
-            try:
-                review_result = json.loads(result.response)
-                logger.info(
-                    f"[CognitiveMiddleware] CodeReviewerAgent completed. "
-                    f"Review posted: {review_result.get('review_posted', False)}, "
-                    f"Severity: {review_result.get('severity', 'unknown')}, "
-                    f"Findings: {review_result.get('critical_count', 0)} critical, "
-                    f"{review_result.get('warning_count', 0)} warnings"
-                )
-                return review_result
-            except json.JSONDecodeError:
-                logger.error(
-                    f"[CognitiveMiddleware] CodeReviewerAgent returned invalid JSON: "
-                    f"{result.response[:200]}"
-                )
-                return {
-                    "success": False,
-                    "review_posted": False,
-                    "error": "CodeReviewerAgent response was not valid JSON",
-                }
-        else:
-            logger.warning(
-                f"[CognitiveMiddleware] CodeReviewerAgent invocation failed: {result.error}"
-            )
-            return {
-                "success": False,
-                "review_posted": False,
-                "error": result.error or "CodeReviewerAgent invocation failed",
-            }
-
-    except Exception as e:
-        logger.error(f"[CognitiveMiddleware] Error invoking CodeReviewerAgent: {e}")
-        return {
-            "success": False,
-            "review_posted": False,
             "error": str(e),
         }
 
@@ -578,42 +470,6 @@ def cognitive_error_handler(agent_id: str):
                             f"PR {repair_result.get('pr_url')}"
                         )
 
-                        # ============================================================
-                        # CodeReviewerAgent Trigger (Phase 1 Implementation)
-                        # ============================================================
-                        # After RepairAgent creates DRAFT PR, invoke Code Review Agent
-                        # to perform automated peer review (Red Team pattern)
-                        logger.info(
-                            f"[CognitiveMiddleware] Triggering CodeReviewerAgent for "
-                            f"PR #{repair_result.get('pr_number')}..."
-                        )
-
-                        review_result = await _invoke_code_review_agent(
-                            repair_result=repair_result,
-                            session_id=kwargs.get("session_id"),
-                        )
-
-                        # Include review details in enriched error
-                        if review_result.get("review_posted"):
-                            enriched["review_posted"] = True
-                            enriched["review_details"] = review_result
-                            logger.info(
-                                f"[CognitiveMiddleware] CodeReviewerAgent completed review: "
-                                f"Severity: {review_result.get('severity', 'unknown')}, "
-                                f"{review_result.get('critical_count', 0)} critical issues, "
-                                f"{review_result.get('warning_count', 0)} warnings, "
-                                f"{review_result.get('info_count', 0)} info"
-                            )
-                        else:
-                            enriched["review_posted"] = False
-                            enriched["review_error"] = review_result.get("error")
-                            logger.warning(
-                                f"[CognitiveMiddleware] CodeReviewerAgent failed to post review: "
-                                f"{review_result.get('error')}"
-                            )
-                        # ============================================================
-                        # END CodeReviewerAgent Trigger
-                        # ============================================================
                     else:
                         enriched["repair_applied"] = False
                         enriched["repair_error"] = repair_result.get("error")
@@ -738,7 +594,7 @@ async def enrich_batch_errors(
         - enriched_errors: List of errors with human_explanation and suggested_fix
         - common_causes: List of common root causes across all errors
     """
-    from shared.a2a_client import A2AClient
+    from shared.strands_a2a_client import A2AClient
 
     if not errors:
         return {

@@ -59,6 +59,12 @@ async def validate_python_ast_tool(code: str, filename: str) -> str:
             "filename": "main.py"
         }
 
+    Raises:
+        SyntaxError: If Python code has invalid syntax (caught internally, returns valid=False with error details).
+        IndentationError: If Python code has indentation issues (caught internally, returns valid=False).
+        TabError: If Python code has tab/space mixing issues (caught internally, returns valid=False).
+        Exception: If unexpected error occurs during parsing (caught internally, returns success=False).
+
     Example:
         # Valid code
         result = await validate_python_ast_tool("print('Hello')", "test.py")
@@ -157,6 +163,11 @@ async def run_targeted_tests_tool(file_path: str, test_pattern: str = None) -> s
             "output": "pytest output summary (truncated)"
         }
 
+    Raises:
+        subprocess.TimeoutExpired: If pytest execution exceeds 120s timeout (caught internally, returns success=False).
+        FileNotFoundError: If test file does not exist (caught internally, returns success=False).
+        Exception: If unexpected error occurs during test execution (caught internally, returns success=False).
+
     Example:
         # Run all tests in file
         result = await run_targeted_tests_tool("tests/unit/test_repair.py")
@@ -208,7 +219,7 @@ async def run_targeted_tests_tool(file_path: str, test_pattern: str = None) -> s
                             passed = int(parts[i - 1])
                         elif part == "failed" and i > 0:
                             failed = int(parts[i - 1])
-                except:
+                except (ValueError, IndexError):
                     pass
 
         total = passed + failed

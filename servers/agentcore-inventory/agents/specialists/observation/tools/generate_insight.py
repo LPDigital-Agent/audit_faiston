@@ -297,6 +297,10 @@ def generate_insight(
             "deduplicated_count": 1,  # Skipped due to cooldown
             "human_message": "Gerados 3 insights para revisão."
         }
+
+    Raises:
+        json.JSONDecodeError: If patterns_json contains invalid JSON (caught internally, returns JSON error response).
+        Exception: If AgentCore Memory operations fail (caught internally, returns JSON error response).
     """
     async def _generate_and_store() -> Dict[str, Any]:
         """Async wrapper for memory operations."""
@@ -493,6 +497,9 @@ def dismiss_insight(
             "dismissal_count": 1,
             "human_message": "Insight descartado. Aprenderemos com sua decisão."
         }
+
+    Raises:
+        Exception: If AgentCore Memory learn operation fails (caught internally, returns JSON error response).
     """
     async def _dismiss() -> Dict[str, Any]:
         """Async wrapper for memory operations."""

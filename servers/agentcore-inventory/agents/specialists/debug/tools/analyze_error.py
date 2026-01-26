@@ -165,6 +165,10 @@ async def analyze_error_tool(
 
     Returns:
         Comprehensive analysis result with LLM-powered insights
+
+    Raises:
+        MemoryError: If AgentCore Memory query fails (caught internally).
+        Exception: If Gemini API call fails (caught internally, returns fallback analysis).
     """
     logger.info(f"[analyze_error] BUG-027: AI-Powered analysis: {error_type} in {operation}")
 

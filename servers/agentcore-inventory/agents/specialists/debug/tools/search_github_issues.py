@@ -93,6 +93,10 @@ async def search_github_issues_tool(
             repos=["strands-agents/sdk-python"],
             max_results=5
         )
+
+    Raises:
+        httpx.TimeoutException: If GitHub API request times out (caught internally).
+        httpx.HTTPStatusError: If GitHub API returns error status (caught internally).
     """
     logger.info(
         "[search_github_issues] BUG-034: Searching GitHub for: %s",

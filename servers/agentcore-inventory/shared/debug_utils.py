@@ -66,7 +66,7 @@ async def _get_debug_client():
     async with _client_lock:
         # Double-check after acquiring lock
         if _debug_client is None:
-            from shared.a2a_client import A2AClient
+            from shared.strands_a2a_client import A2AClient
             _debug_client = A2AClient()
             logger.debug("[debug_utils] Created singleton A2A client")
 

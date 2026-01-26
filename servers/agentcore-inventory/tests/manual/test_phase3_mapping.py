@@ -258,7 +258,7 @@ def test_exact_match_mapping(use_mock: bool = True) -> Tuple[bool, str]:
         )
     else:
         # Real A2A call would go here
-        from shared.a2a_client import A2AClient
+        from shared.strands_a2a_client import A2AClient
         import asyncio
 
         async def _call():
@@ -318,7 +318,7 @@ def test_ptbr_semantic_mapping(use_mock: bool = True) -> Tuple[bool, str]:
             session_id="test-ptbr-001",
         )
     else:
-        from shared.a2a_client import A2AClient
+        from shared.strands_a2a_client import A2AClient
         import asyncio
 
         async def _call():
@@ -371,7 +371,7 @@ def test_needs_input_flow(use_mock: bool = True) -> Tuple[bool, str]:
             session_id="test-missing-001",
         )
     else:
-        from shared.a2a_client import A2AClient
+        from shared.strands_a2a_client import A2AClient
         import asyncio
 
         async def _call():
@@ -423,7 +423,7 @@ def test_unmapped_columns(use_mock: bool = True) -> Tuple[bool, str]:
             session_id="test-unknown-001",
         )
     else:
-        from shared.a2a_client import A2AClient
+        from shared.strands_a2a_client import A2AClient
         import asyncio
 
         async def _call():
@@ -601,7 +601,7 @@ def test_a2a_connectivity() -> Tuple[bool, str]:
     print_info("Testing A2A connectivity to SchemaMapper...")
 
     try:
-        from shared.a2a_client import A2AClient
+        from shared.strands_a2a_client import A2AClient
         import asyncio
 
         async def _check():

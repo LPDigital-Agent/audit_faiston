@@ -190,6 +190,12 @@ async def read_code_snippet_tool(
      -> 40 |         return data["missing_key"]  # KeyError here
         41 |     except Exception as e:
         42 |         logger.error(e)
+
+    Raises:
+        ValueError: If line_number < 1 (returned as error dict).
+        FileNotFoundError: If file doesn't exist (caught internally).
+        PermissionError: If file can't be read due to permissions (caught internally).
+        UnicodeDecodeError: If file encoding cannot be detected (caught internally).
     """
     logger.info(f"[CodeInspector] Reading {file_path}:{line_number} (context={context_lines})")
 

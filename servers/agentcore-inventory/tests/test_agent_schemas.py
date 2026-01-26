@@ -36,6 +36,7 @@ from shared.agent_schemas import (
     EquipmentResearchResponse,
     EstoqueControlResponse,
     DataImportResponse,
+    SchemaMappingResponse,  # BUG-045: Test questions field preservation
     # Orchestrator responses
     OrchestratorResponse,
     NexoImportResponse,
@@ -510,3 +511,108 @@ class TestBackwardCompatibility:
         assert response.error_type == "Unknown"
         assert response.root_causes == []
         assert response.llm_powered is True
+
+
+class TestSchemaMappingResponse:
+    """
+    BUG-045 FIX: Test SchemaMappingResponse preserves questions field.
+
+    ROOT CAUSE: When Strands SDK uses structured_output_model, fields NOT defined
+    in the Pydantic schema are silently dropped during serialization. The LLM
+    generated questions, but Pydantic didn't preserve them in model_dump().
+
+    This test verifies the fix: adding questions field to the schema.
+    """
+
+    def test_questions_field_preserved_in_round_trip(self):
+        """
+        BUG-045 REGRESSION TEST: Verify questions field survives serialization.
+
+        This is a FULL ROUND-TRIP test:
+        1. Create SchemaMappingResponse from dict with questions
+        2. Call model_dump() to serialize back to dict
+        3. Verify questions field is PRESENT and CONTENT matches
+
+        Why full round-trip? A simple hasattr() only validates internal state.
+        The actual bug was data loss during export (model_dump()).
+        """
+        # Simulate LLM response with questions (NEEDS_INPUT mode)
+        input_data = {
+            "success": True,
+            "status": "needs_input",
+            "session_id": "test-123",
+            "questions": [
+                {
+                    "id": "q1",
+                    "question": "Which column contains the part number?",
+                    "options": ["COL1", "COL2", "COL3"],
+                },
+                {
+                    "id": "q2",
+                    "question": "Which column contains the quantity?",
+                    "options": ["QTY", "AMOUNT", "TOTAL"],
+                },
+            ],
+            "overall_confidence": 0.65,
+        }
+
+        # Step 1: Create model instance from dict
+        response = SchemaMappingResponse(**input_data)
+
+        # Step 2: Serialize back to dict (this is where the bug occurred)
+        output_data = response.model_dump()
+
+        # Step 3: Verify questions field is preserved
+        assert "questions" in output_data, "questions field missing in model_dump()"
+        assert isinstance(output_data["questions"], list), "questions should be a list"
+        assert len(output_data["questions"]) == 2, "questions count mismatch"
+
+        # Step 4: Verify CONTENT matches (not just presence)
+        assert output_data["questions"][0]["id"] == "q1"
+        assert output_data["questions"][0]["question"] == "Which column contains the part number?"
+        assert output_data["questions"][1]["id"] == "q2"
+
+    def test_questions_field_defaults_to_empty_list(self):
+        """
+        Backward compatibility: questions field should default to empty list.
+
+        This ensures old code (or LLM responses without questions) still works.
+        """
+        # Create minimal response (SUCCESS mode - no questions needed)
+        response = SchemaMappingResponse(
+            success=True,
+            status="success",
+            session_id="test-456",
+        )
+
+        # Verify questions defaults to empty list
+        assert response.questions == []
+
+        # Verify it serializes correctly
+        output_data = response.model_dump()
+        assert output_data["questions"] == []
+
+    def test_questions_field_accepts_various_dict_structures(self):
+        """
+        Postel's Law: Be liberal in what you accept.
+
+        questions is List[Dict[str, Any]], not a strict Pydantic model.
+        This allows flexibility for LLM-generated content evolution.
+        """
+        # Various valid question structures
+        response = SchemaMappingResponse(
+            success=True,
+            status="needs_input",
+            session_id="test-789",
+            questions=[
+                {"id": "q1", "text": "Simple question"},  # Different keys
+                {"question": "No ID", "type": "text"},  # Missing id
+                {"nested": {"data": "allowed"}},  # Nested structure
+            ],
+        )
+
+        # All should be preserved as-is
+        output_data = response.model_dump()
+        assert len(output_data["questions"]) == 3
+        assert output_data["questions"][0]["text"] == "Simple question"
+        assert output_data["questions"][2]["nested"]["data"] == "allowed"

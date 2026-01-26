@@ -3,13 +3,13 @@
 # =============================================================================
 # This module provides shared infrastructure for the 100% Agentic architecture:
 #
-# - audit_emitter: Agent Room real-time visibility (DynamoDB audit trail)
+# - audit_emitter: Agent activity logging (DynamoDB audit trail)
 # - a2a_client: A2A protocol client (JSON-RPC 2.0)
 # - xray_tracer: X-Ray distributed tracing
 #
 # Usage:
 #   from shared.audit_emitter import AgentAuditEmitter, AgentStatus
-#   from shared.a2a_client import A2AClient, delegate_to_learning
+#   from shared.strands_a2a_client import StrandsA2AClient, A2AResponse
 #   from shared.xray_tracer import trace_a2a_call, init_xray_tracing
 #
 # Architecture: AWS Strands Agents + AWS Bedrock AgentCore (100% Agentic)
@@ -23,14 +23,12 @@ from shared.audit_emitter import (
     emit_agent_event,
 )
 
-# A2A Client exports
-from shared.a2a_client import (
-    A2AClient,
-    A2AMessage,
+# A2A Client exports (Strands Framework - CLAUDE.md IMMUTABLE)
+from shared.strands_a2a_client import (
+    StrandsA2AClient,
+    A2AClient,  # Alias for StrandsA2AClient
+    LocalA2AClient,  # Legacy alias for backward compatibility
     A2AResponse,
-    delegate_to_learning,
-    delegate_to_validation,
-    delegate_to_schema_evolution,
 )
 
 # X-Ray Tracer exports
@@ -85,19 +83,29 @@ from shared.message_utils import (
     safe_message_lower,
 )
 
+# Prompt Templates exports (AI Agent Best Practices - Pillar 5)
+from shared.prompt_templates import (
+    render_prompt,
+    render_prompt_safe,
+    sanitize_input,
+    sanitize_dict,
+    wrap_user_input,
+    build_context_block,
+    INSTRUCTION_HIERARCHY_BLOCK,
+    REFUSAL_PATTERN_BLOCK,
+)
+
 __all__ = [
     # Audit Emitter
     "AgentAuditEmitter",
     "AgentStatus",
     "AuditEvent",
     "emit_agent_event",
-    # A2A Client
+    # A2A Client (Strands Framework)
+    "StrandsA2AClient",
     "A2AClient",
-    "A2AMessage",
+    "LocalA2AClient",
     "A2AResponse",
-    "delegate_to_learning",
-    "delegate_to_validation",
-    "delegate_to_schema_evolution",
     # X-Ray Tracer
     "init_xray_tracing",
     "trace_a2a_call",
@@ -135,4 +143,13 @@ __all__ = [
     # Message Utils (BUG-039: Strands Message Extraction)
     "extract_text_from_message",
     "safe_message_lower",
+    # Prompt Templates (AI Agent Best Practices - Pillar 5)
+    "render_prompt",
+    "render_prompt_safe",
+    "sanitize_input",
+    "sanitize_dict",
+    "wrap_user_input",
+    "build_context_block",
+    "INSTRUCTION_HIERARCHY_BLOCK",
+    "REFUSAL_PATTERN_BLOCK",
 ]

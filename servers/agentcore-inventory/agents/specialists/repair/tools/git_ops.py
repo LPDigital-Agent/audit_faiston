@@ -150,6 +150,10 @@ async def create_fix_branch_tool(error_id: str, description: str) -> str:
             "error": "error message if failed"
         }
 
+    Raises:
+        SecurityError: If branch name violates protection rules (caught internally, returns JSON error with security_violation=True).
+        Exception: If GitHub CLI command fails (caught internally, returns JSON error response).
+
     Safety:
         - Branch name is automatically validated against protection rules
         - Creates branch from current HEAD (main/master)
@@ -258,6 +262,10 @@ async def commit_fix_tool(
             "error": "error message if failed"
         }
 
+    Raises:
+        SecurityError: If branch name violates protection rules (caught internally, returns JSON error with security_violation=True).
+        Exception: If GitHub CLI command or syntax validation fails (caught internally, returns JSON error response).
+
     Safety:
         - MANDATORY branch validation (cannot commit to protected branches)
         - MANDATORY syntax validation before commit
@@ -318,7 +326,7 @@ async def commit_fix_tool(
             try:
                 response_data = json.loads(result["output"])
                 commit_sha = response_data.get("commit", {}).get("sha", "unknown")
-            except:
+            except json.JSONDecodeError:
                 commit_sha = "unknown"
 
             logger.info(f"[GitOps] Commit successful: {commit_sha}")
@@ -380,6 +388,10 @@ async def create_pr_tool(
             "error": "error message if failed"
         }
 
+    Raises:
+        SecurityError: If branch name violates protection rules (caught internally, returns JSON error with security_violation=True).
+        Exception: If GitHub CLI command fails (caught internally, returns JSON error response).
+
     Safety:
         - ALWAYS creates DRAFT PRs (requires human approval)
         - Auto-adds labels: automated-fix, needs-review, security-audit
@@ -415,7 +427,7 @@ async def create_pr_tool(
             # Extract PR number from URL
             try:
                 pr_number = int(pr_url.split("/")[-1])
-            except:
+            except (ValueError, IndexError):
                 pr_number = 0
 
             logger.info(f"[GitOps] PR created successfully: {pr_url}")

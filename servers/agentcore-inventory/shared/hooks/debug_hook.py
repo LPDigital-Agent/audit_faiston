@@ -314,7 +314,7 @@ class DebugHook(HookProvider):
         unnecessary initialization at agent startup.
         """
         if self._a2a_client is None:
-            from shared.a2a_client import A2AClient
+            from shared.strands_a2a_client import A2AClient
             self._a2a_client = A2AClient()
         return self._a2a_client
 

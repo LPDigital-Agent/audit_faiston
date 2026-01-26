@@ -93,6 +93,9 @@ def scan_recent_activity(
             },
             "human_message": "Encontrei 12 fatos e 5 episódios nas últimas 24 horas."
         }
+
+    Raises:
+        Exception: If AgentCore Memory operations fail (caught internally, returns JSON error response).
     """
     async def _scan_memory() -> Dict[str, Any]:
         """Async wrapper for memory operations."""

@@ -28,8 +28,8 @@ from strands.hooks.events import (
 
 from shared.circuit_breaker import CircuitBreaker
 
-# NOTE: SGAAuditLogger imported lazily in __init__ to avoid package name collision
-# between top-level tools/ and agents/tools/ during module initialization.
+# BUG-033 FIX: SGAAuditLogger is imported lazily in __init__ to avoid namespace collision
+# between agents/tools/ and root tools/ packages. See config.py for full explanation.
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +89,26 @@ class SecurityAuditHook(HookProvider):
             name="security_audit_hook",
         )
 
-        # Lazy import to avoid package name collision during module initialization
-        from tools.dynamodb_client import SGAAuditLogger
+        # BUG-033 FIX: Lazy import SGAAuditLogger to avoid namespace collision
+        # between agents/tools/ and root tools/ packages.
+        import sys
 
-        # Audit logger (reuse existing SGAAuditLogger)
-        self.audit_logger = SGAAuditLogger()
+        # Compute project root from this file's location
+        # File: /var/task/shared/hooks/security_audit_hook.py
+        # Root: /var/task (up 2 levels: security_audit_hook.py → hooks → shared → root)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(current_dir, "../.."))
+
+        # Ensure project root is first in sys.path to resolve tools/ correctly
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+
+        try:
+            from tools.dynamodb_client import SGAAuditLogger
+            self.audit_logger = SGAAuditLogger()
+        except ImportError as e:
+            logger.error(f"[SecurityAuditHook] Failed to import tools.dynamodb_client: {e}")
+            raise
 
         # Track session context
         self._current_session_id: Optional[str] = None

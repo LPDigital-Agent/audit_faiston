@@ -30,10 +30,13 @@ from strands import tool
 
 from shared.env_config import get_required_env
 
-# Cognitive error handling (Nexo Immune System)
+# Cognitive error handling (Nexo Immune System) - enrich_batch_errors for batch error analysis
 from shared.cognitive_error_handler import enrich_batch_errors
 
 logger = logging.getLogger(__name__)
+
+# Agent ID for cognitive error routing (matches parent agent)
+AGENT_ID = "data_transformer"
 
 # File size limits (per plan)
 MAX_FILE_SIZE_MB = int(os.environ.get("MAX_FILE_SIZE_MB", "100"))
@@ -71,6 +74,10 @@ def validate_file_size(s3_key: str) -> str:
         - estimated_rows: int
         - within_limits: bool
         - human_message: str (if rejected)
+
+    Raises:
+        botocore.exceptions.ClientError: If S3 head_object fails (caught internally).
+        EnvironmentError: If DOCUMENTS_BUCKET env var is missing (FAIL-CLOSED).
     """
     try:
         s3 = _get_s3_client()
@@ -302,6 +309,12 @@ def stream_and_transform(
         - rows_transformed: int
         - errors: List of raw errors (for DebugAgent enrichment)
         - stopped_early: bool (if STOP_ON_ERROR triggered)
+
+    Raises:
+        json.JSONDecodeError: If mappings_json contains invalid JSON (caught internally).
+        botocore.exceptions.ClientError: If S3 get_object fails (caught internally).
+        pandas.errors.EmptyDataError: If file is empty (caught internally).
+        UnicodeDecodeError: If file encoding cannot be detected (caught internally).
     """
     try:
         # Parse mappings
@@ -432,6 +445,10 @@ def enrich_errors_with_debug(
     Returns:
         JSON string with enriched errors including human_explanation
         and suggested_fix for each error.
+
+    Raises:
+        json.JSONDecodeError: If errors_json contains invalid JSON (caught internally).
+        A2AClientError: If DebugAgent A2A call fails (graceful degradation).
     """
     try:
         errors = json.loads(errors_json)

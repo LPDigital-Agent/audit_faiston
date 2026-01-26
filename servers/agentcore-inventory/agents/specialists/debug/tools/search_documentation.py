@@ -446,6 +446,9 @@ async def search_documentation_tool(
 
     Returns:
         Documentation search results with URLs and relevance
+
+    Raises:
+        None: This function performs static lookups only and does not raise exceptions.
     """
     logger.info(f"[search_documentation] BUG-032: Enhanced query: {query[:80]}...")
 

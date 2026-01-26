@@ -275,7 +275,7 @@ def mock_a2a_client():
     Returns:
         Mock A2AClient with invoke_agent method that returns realistic responses
     """
-    from shared.a2a_client import A2AClient
+    from shared.strands_a2a_client import A2AClient
 
     mock_client = MagicMock(spec=A2AClient)
 

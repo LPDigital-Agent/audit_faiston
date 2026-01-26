@@ -17,9 +17,14 @@ from typing import Optional
 
 from strands import tool
 
+from shared.cognitive_error_handler import cognitive_sync_handler
 from tools.library.file_processing import FileInspector, get_file_inspector
 
-# Import debug error handler for error routing
+# Module-level AGENT_ID for shared analysis tools
+# Errors will be attributed to this module and include calling context
+AGENT_ID = "analysis_tools"
+
+# Import debug error handler for error routing (fallback for non-decorated paths)
 try:
     from agents.specialists.debug.main import debug_error
 except ImportError:
@@ -29,6 +34,7 @@ except ImportError:
         pass
 
 
+@cognitive_sync_handler(AGENT_ID)
 @tool
 def get_file_structure(s3_key: str, bucket: Optional[str] = None) -> str:
     """
@@ -146,6 +152,7 @@ def get_file_structure(s3_key: str, bucket: Optional[str] = None) -> str:
         )
 
 
+@cognitive_sync_handler(AGENT_ID)
 @tool
 def validate_file_columns(
     s3_key: str,

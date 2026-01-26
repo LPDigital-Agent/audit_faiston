@@ -168,12 +168,12 @@ class TestAgentSkillQuality:
 
 
 class TestRuntimeIdConsistency:
-    """Test RUNTIME_ID consistency with a2a_client.py registry."""
+    """Test RUNTIME_ID consistency with strands_a2a_client.py registry."""
 
     def test_runtime_ids_match_registry(self):
-        """Agent RUNTIME_IDs should match a2a_client PROD_RUNTIME_IDS."""
+        """Agent RUNTIME_IDs should match strands_a2a_client PROD_RUNTIME_IDS."""
         try:
-            from shared.a2a_client import PROD_RUNTIME_IDS
+            from shared.strands_a2a_client import PROD_RUNTIME_IDS
 
             # Check each agent that should be in the registry
             agents_to_check = [

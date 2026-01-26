@@ -11,10 +11,10 @@
 # 4. Database Health - Query inventory for anomalies
 # =============================================================================
 
-from .scan_recent_activity import scan_recent_activity
-from .analyze_patterns import analyze_patterns
-from .generate_insight import generate_insight, dismiss_insight
-from .check_inventory_health import check_inventory_health
+from agents.specialists.observation.tools.scan_recent_activity import scan_recent_activity
+from agents.specialists.observation.tools.analyze_patterns import analyze_patterns
+from agents.specialists.observation.tools.generate_insight import generate_insight, dismiss_insight
+from agents.specialists.observation.tools.check_inventory_health import check_inventory_health
 
 __all__ = [
     "scan_recent_activity",

@@ -23,8 +23,8 @@ from typing import Any, Dict, Optional
 
 from strands import tool
 
-# A2A Client for inter-agent communication
-from shared.a2a_client import LocalA2AClient
+# A2A Client for inter-agent communication (Strands Framework)
+from shared.strands_a2a_client import LocalA2AClient
 
 # Memory (AgentCore Memory SDK)
 from shared.memory_manager import AgentMemoryManager, MemoryOriginType
@@ -33,6 +33,9 @@ from shared.memory_manager import AgentMemoryManager, MemoryOriginType
 from shared.agent_schemas import TransformationStatus
 
 logger = logging.getLogger(__name__)
+
+# Agent ID for cognitive error routing (matches parent agent)
+AGENT_ID = "data_transformer"
 
 # In-memory job storage (MVP - use DynamoDB in production)
 # Format: {job_id: TransformationResult-like dict}
@@ -115,44 +118,55 @@ def create_job(
         - job_id: str (UUID)
         - status: "started"
         - human_message: str (pt-BR)
+
+    Raises:
+        None: This function does not raise exceptions; always returns valid JSON.
     """
-    job_id = f"job-{uuid.uuid4().hex[:12]}"
+    try:
+        job_id = f"job-{uuid.uuid4().hex[:12]}"
 
-    job_data = {
-        "job_id": job_id,
-        "session_id": session_id,
-        "s3_key": s3_key,
-        "user_id": user_id,
-        "status": TransformationStatus.STARTED.value,
-        "strategy_used": strategy,
-        "rows_total": 0,
-        "rows_processed": 0,
-        "rows_inserted": 0,
-        "rows_rejected": 0,
-        "rejection_report_url": None,
-        "rejection_summary": [],
-        "human_message": "Processamento iniciado em background.",
-        "started_at": _now_iso(),
-        "completed_at": None,
-        "debug_analysis": None,
-    }
+        job_data = {
+            "job_id": job_id,
+            "session_id": session_id,
+            "s3_key": s3_key,
+            "user_id": user_id,
+            "status": TransformationStatus.STARTED.value,
+            "strategy_used": strategy,
+            "rows_total": 0,
+            "rows_processed": 0,
+            "rows_inserted": 0,
+            "rows_rejected": 0,
+            "rejection_report_url": None,
+            "rejection_summary": [],
+            "human_message": "Processamento iniciado em background.",
+            "started_at": _now_iso(),
+            "completed_at": None,
+            "debug_analysis": None,
+        }
 
-    _JOBS[job_id] = job_data
+        _JOBS[job_id] = job_data
 
-    logger.info(
-        f"[JobManager] Created job {job_id} for session {session_id}, "
-        f"s3_key={s3_key}, strategy={strategy}"
-    )
+        logger.info(
+            f"[JobManager] Created job {job_id} for session {session_id}, "
+            f"s3_key={s3_key}, strategy={strategy}"
+        )
 
-    return json.dumps({
-        "success": True,
-        "job_id": job_id,
-        "status": "started",
-        "human_message": (
-            "Iniciando processamento em background. "
-            "Você será notificado quando terminar."
-        ),
-    })
+        return json.dumps({
+            "success": True,
+            "job_id": job_id,
+            "status": "started",
+            "human_message": (
+                "Iniciando processamento em background. "
+                "Você será notificado quando terminar."
+            ),
+        })
+
+    except Exception as e:
+        logger.exception(f"[JobManager] Error creating job: {e}")
+        return json.dumps({
+            "success": False,
+            "error": str(e),
+        })
 
 
 @tool
@@ -168,32 +182,43 @@ def get_job_status(job_id: str) -> str:
 
     Returns:
         JSON string with full job status including progress metrics.
+
+    Raises:
+        None: This function does not raise exceptions; returns error JSON if job not found.
     """
-    if job_id not in _JOBS:
-        logger.warning(f"[JobManager] Job {job_id} not found")
+    try:
+        if job_id not in _JOBS:
+            logger.warning(f"[JobManager] Job {job_id} not found")
+            return json.dumps({
+                "success": False,
+                "error": f"Job {job_id} not found",
+                "human_message": "Não encontrei esse job. Pode ter expirado.",
+            })
+
+        job = _JOBS[job_id]
+
+        # Calculate progress percentage
+        progress = 0
+        if job["rows_total"] > 0:
+            progress = int((job["rows_processed"] / job["rows_total"]) * 100)
+
+        logger.info(
+            f"[JobManager] Status check for job {job_id}: "
+            f"status={job['status']}, progress={progress}%"
+        )
+
         return json.dumps({
-            "success": False,
-            "error": f"Job {job_id} not found",
-            "human_message": "Não encontrei esse job. Pode ter expirado.",
+            "success": True,
+            **job,
+            "progress_percent": progress,
         })
 
-    job = _JOBS[job_id]
-
-    # Calculate progress percentage
-    progress = 0
-    if job["rows_total"] > 0:
-        progress = int((job["rows_processed"] / job["rows_total"]) * 100)
-
-    logger.info(
-        f"[JobManager] Status check for job {job_id}: "
-        f"status={job['status']}, progress={progress}%"
-    )
-
-    return json.dumps({
-        "success": True,
-        **job,
-        "progress_percent": progress,
-    })
+    except Exception as e:
+        logger.exception(f"[JobManager] Error getting job status: {e}")
+        return json.dumps({
+            "success": False,
+            "error": str(e),
+        })
 
 
 @tool
@@ -229,65 +254,83 @@ def update_job_status(
 
     Returns:
         JSON string with updated job status.
+
+    Raises:
+        json.JSONDecodeError: If rejection_summary or debug_analysis contains invalid JSON (caught internally).
+        A2AClientError: If ObservationAgent trigger fails (non-blocking, logged as warning).
     """
-    if job_id not in _JOBS:
-        return json.dumps({
-            "success": False,
-            "error": f"Job {job_id} not found",
-        })
+    try:
+        if job_id not in _JOBS:
+            return json.dumps({
+                "success": False,
+                "error": f"Job {job_id} not found",
+            })
 
-    job = _JOBS[job_id]
+        job = _JOBS[job_id]
 
-    # Update only provided fields
-    if status:
-        job["status"] = status
-    if rows_total >= 0:
-        job["rows_total"] = rows_total
-    if rows_processed >= 0:
-        job["rows_processed"] = rows_processed
-    if rows_inserted >= 0:
-        job["rows_inserted"] = rows_inserted
-    if rows_rejected >= 0:
-        job["rows_rejected"] = rows_rejected
-    if rejection_report_url:
-        job["rejection_report_url"] = rejection_report_url
-    if rejection_summary and rejection_summary != "[]":
-        try:
-            job["rejection_summary"] = json.loads(rejection_summary)
-        except json.JSONDecodeError:
-            pass
-    if human_message:
-        job["human_message"] = human_message
-    if debug_analysis:
-        try:
-            job["debug_analysis"] = json.loads(debug_analysis)
-        except json.JSONDecodeError:
-            pass
+        # Update only provided fields
+        if status:
+            job["status"] = status
+        if rows_total >= 0:
+            job["rows_total"] = rows_total
+        if rows_processed >= 0:
+            job["rows_processed"] = rows_processed
+        if rows_inserted >= 0:
+            job["rows_inserted"] = rows_inserted
+        if rows_rejected >= 0:
+            job["rows_rejected"] = rows_rejected
+        if rejection_report_url:
+            job["rejection_report_url"] = rejection_report_url
+        if rejection_summary and rejection_summary != "[]":
+            try:
+                job["rejection_summary"] = json.loads(rejection_summary)
+            except json.JSONDecodeError:
+                pass
+        if human_message:
+            job["human_message"] = human_message
+        if debug_analysis:
+            try:
+                job["debug_analysis"] = json.loads(debug_analysis)
+            except json.JSONDecodeError:
+                pass
 
-    # Set completed_at if terminal status
-    if status in ["completed", "failed", "partial"]:
-        job["completed_at"] = _now_iso()
+        # Set completed_at if terminal status
+        if status in ["completed", "failed", "partial"]:
+            job["completed_at"] = _now_iso()
 
-        # Fire-and-forget: Trigger ObservationAgent for pattern analysis
-        # This is non-blocking and does not affect the job completion flow
-        asyncio.create_task(
-            _trigger_observation_analysis(
-                session_id=job["session_id"],
-                job_id=job_id,
-                user_id=job["user_id"],
-            )
+            # Fire-and-forget: Trigger ObservationAgent for pattern analysis
+            # This is non-blocking and does not affect the job completion flow
+            try:
+                asyncio.create_task(
+                    _trigger_observation_analysis(
+                        session_id=job["session_id"],
+                        job_id=job_id,
+                        user_id=job["user_id"],
+                    )
+                )
+            except RuntimeError:
+                # No running event loop - skip observation trigger
+                logger.warning(
+                    f"[JobManager] Cannot trigger ObservationAgent: no running event loop"
+                )
+
+        logger.info(
+            f"[JobManager] Updated job {job_id}: status={job['status']}, "
+            f"processed={job['rows_processed']}/{job['rows_total']}"
         )
 
-    logger.info(
-        f"[JobManager] Updated job {job_id}: status={job['status']}, "
-        f"processed={job['rows_processed']}/{job['rows_total']}"
-    )
+        return json.dumps({
+            "success": True,
+            "job_id": job_id,
+            "status": job["status"],
+        })
 
-    return json.dumps({
-        "success": True,
-        "job_id": job_id,
-        "status": job["status"],
-    })
+    except Exception as e:
+        logger.exception(f"[JobManager] Error updating job status: {e}")
+        return json.dumps({
+            "success": False,
+            "error": str(e),
+        })
 
 
 @tool
@@ -308,6 +351,9 @@ def save_job_notification(
 
     Returns:
         JSON string with memory_id of saved notification.
+
+    Raises:
+        MemoryAPIError: If AgentCore Memory save fails (caught internally).
     """
     if job_id not in _JOBS:
         return json.dumps({
@@ -400,6 +446,9 @@ def check_pending_notifications(user_id: str) -> str:
 
     Returns:
         JSON string with list of pending notifications.
+
+    Raises:
+        MemoryAPIError: If AgentCore Memory query fails (caught internally).
     """
     try:
         memory_manager = AgentMemoryManager()

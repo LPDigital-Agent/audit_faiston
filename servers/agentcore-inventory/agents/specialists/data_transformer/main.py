@@ -48,11 +48,12 @@ from shared.hooks.security_audit_hook import SecurityAuditHook
 # AUDIT-003: Global error capture for Debug Agent enrichment
 
 # Cognitive error handler (Nexo Immune System)
+from shared.cognitive_error_handler import cognitive_sync_handler, CognitiveError
 
 # Structured output schemas
 
 # Tools
-from .tools import (
+from agents.specialists.data_transformer.tools import (
     load_import_preferences,
     save_import_preference,
     create_job,
@@ -205,6 +206,7 @@ Example for completed with errors:
 # =============================================================================
 
 
+@cognitive_sync_handler(AGENT_ID)
 @tool
 def health_check() -> str:
     """

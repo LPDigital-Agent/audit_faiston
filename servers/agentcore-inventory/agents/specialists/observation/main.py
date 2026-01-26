@@ -56,7 +56,7 @@ from shared.hooks.debug_hook import DebugHook
 from shared.hooks.security_audit_hook import SecurityAuditHook
 
 # Cognitive error handler (Nexo Immune System)
-from shared.cognitive_error_handler import cognitive_error_handler
+from shared.cognitive_error_handler import cognitive_error_handler, cognitive_sync_handler
 
 # Structured output schemas
 from shared.agent_schemas import ObservationResponse, InsightReport
@@ -88,8 +88,8 @@ Phase 5 of the Smart Import architecture.
 # Port for local A2A server (see LOCAL_AGENTS in a2a_client.py:1455)
 AGENT_PORT = 9012
 
-# Runtime ID for AgentCore deployment (existing)
-RUNTIME_ID = "faiston_sga_observation-ACVR2SDmtJ"
+# Runtime ID for AgentCore deployment (updated Jan 23, 2026 - BUG-023 fix)
+RUNTIME_ID = "faiston_sga_observation-tgaIiC6AtX"
 
 
 # =============================================================================
@@ -188,6 +188,7 @@ Always respond to users in Brazilian Portuguese (pt-BR).
 # =============================================================================
 
 
+@cognitive_sync_handler(AGENT_ID)
 @tool
 def health_check() -> str:
     """

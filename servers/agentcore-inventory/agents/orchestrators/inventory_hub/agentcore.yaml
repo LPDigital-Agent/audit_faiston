@@ -1,7 +1,7 @@
 # =============================================================================
 # AgentCore Deployment Configuration - Inventory Hub
 # =============================================================================
-# Phase 1: Secure File Ingestion Layer
+# Full Cognitive Import Orchestrator (Phases 1-5)
 #
 # Deploy command:
 #   cd server/agentcore-inventory/agents/orchestrators/inventory_hub
@@ -13,7 +13,7 @@
 # Runtime configuration
 runtime:
   id: faiston_sga_inventory_hub
-  description: "Inventory Hub - Secure File Ingestion (Phase 1)"
+  description: "Inventory Hub - Full Cognitive Import Orchestrator (Phases 1-5)"
 
   # Memory configuration (STM for session tracking)
   memory:
@@ -53,10 +53,11 @@ environment:
 # Agent metadata
 metadata:
   name: FaistonInventoryHub
-  version: "2026-01-21"
-  phase: "1-secure-file-ingestion"
+  version: "2026-01-25-modular-refactor"
+  phase: "5-full-orchestrator"
   owner: "faiston-sga-team"
   tags:
     - inventory
-    - file-upload
-    - phase-1
+    - cognitive-import
+    - orchestrator
+    - phases-1-to-5

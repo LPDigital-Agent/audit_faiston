@@ -1,8 +1,8 @@
 # =============================================================================
-# Audit Emitter - Agent Room Real-Time Visibility
+# Audit Emitter - Agent Activity Logging
 # =============================================================================
 # Standardized helper for all agents to emit events to DynamoDB audit log.
-# These events power the Agent Room "Sala de Transparência" live feed.
+# Events are stored for observability and debugging purposes.
 #
 # Usage:
 #   from shared.audit_emitter import AgentAuditEmitter, AgentStatus
@@ -11,10 +11,7 @@
 #
 # Architecture:
 # - Writes to DynamoDB audit table (faiston-one-sga-audit-log-prod)
-# - Frontend polls every 5 seconds via TanStack Query
-# - Humanizer transforms events to Portuguese first-person messages
-#
-# Reference: tools/agent_room_service.py (emit_agent_event)
+# - Events available for CloudWatch Insights queries and debugging
 # =============================================================================
 
 from dataclasses import dataclass
@@ -171,7 +168,7 @@ class AgentAuditEmitter:
                 "action": event.status.value,
                 "timestamp": timestamp,
 
-                # Agent Room Display (used by humanizer)
+                # Event details for debugging/observability
                 "details": {
                     "agent_id": self.agent_id,
                     "status": event.status.value,

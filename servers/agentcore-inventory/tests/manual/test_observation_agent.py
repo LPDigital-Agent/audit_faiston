@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 async def invoke_agent(agent_id: str, payload: dict) -> dict:
     """Invoke an agent via A2A protocol."""
-    from shared.a2a_client import LocalA2AClient
+    from shared.strands_a2a_client import LocalA2AClient
 
     client = LocalA2AClient()
     response = await client.invoke_agent(agent_id, payload)

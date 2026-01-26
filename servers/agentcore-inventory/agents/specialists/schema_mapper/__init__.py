@@ -6,7 +6,7 @@ using semantic matching, prior learning, and dynamic schema introspection via MC
 
 Protocol: A2A (JSON-RPC 2.0)
 Agent ID: faiston_schema_mapper
-Port: 9002
+Port: 9018
 Memory: STM + LTM via AgentMemoryManager
 Model: Gemini 2.5 Pro + Thinking (critical inventory agent per CLAUDE.md)
 
@@ -14,7 +14,7 @@ Author: Faiston NEXO Team
 Date: January 2026
 """
 
-from .main import (
+from agents.specialists.schema_mapper.main import (
     AGENT_ID,
     AGENT_NAME,
     AGENT_PORT,

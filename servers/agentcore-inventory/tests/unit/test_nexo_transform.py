@@ -93,9 +93,11 @@ class TestNexoTransform:
         assert sheet["row_count"] == 1500
         assert sheet["detected_format"] == "csv_semicolon"
 
-        # Verify default empty fields
+        # Verify default empty fields (except confidence which is now calculated)
         assert result["column_mappings"] == []
-        assert result["overall_confidence"] == 0.0
+        # BUG-022 FIX: Phase 2 now returns file quality confidence instead of 0.0
+        # Sample data has 4 columns, 3 valid rows, known format → confidence = 1.0
+        assert result["overall_confidence"] == 1.0
         assert result["questions"] == []
 
     def test_pydantic_validation(self, sample_flat_structure, sample_s3_key):

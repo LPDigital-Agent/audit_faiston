@@ -13,23 +13,23 @@ All tools follow CLAUDE.md Tool Quality Standards:
 - JSON return format documented
 """
 
-from .preference_loader import (
+from agents.specialists.data_transformer.tools.preference_loader import (
     load_import_preferences,
     save_import_preference,
 )
-from .job_manager import (
+from agents.specialists.data_transformer.tools.job_manager import (
     create_job,
     get_job_status,
     update_job_status,
     save_job_notification,
     check_pending_notifications,
 )
-from .etl_stream import (
+from agents.specialists.data_transformer.tools.etl_stream import (
     validate_file_size,
     stream_and_transform,
     enrich_errors_with_debug,
 )
-from .batch_loader import (
+from agents.specialists.data_transformer.tools.batch_loader import (
     insert_pending_items_batch,
     insert_all_batches,
     generate_rejection_report,

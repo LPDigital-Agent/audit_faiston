@@ -1,0 +1,31 @@
+# =============================================================================
+# Bandit Security Scanner Configuration
+# =============================================================================
+# Purpose: Strict SAST configuration for Python code security analysis
+# Tool: bandit (https://bandit.readthedocs.io/)
+# =============================================================================
+
+[tool.bandit]
+targets = ["."]
+exclude_dirs = [
+    "tests",
+    "venv",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    "htmlcov"
+]
+
+# Allow asserts in test files only (B101)
+[tool.bandit.assert_used]
+skips = ['*_test.py', 'test_*.py']
+
+# =============================================================================
+# Pytest Configuration
+# =============================================================================
+# Purpose: Configure pytest options including async test support
+# =============================================================================
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"  # Auto-detect and run async test functions
+asyncio_default_fixture_loop_scope = "function"  # Each test gets its own event loop

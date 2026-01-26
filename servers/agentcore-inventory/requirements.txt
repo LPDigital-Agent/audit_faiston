@@ -29,6 +29,11 @@ strands-agents[a2a,gemini]==1.22.0
 bedrock-agentcore>=0.1.0
 strands-agents-tools==0.2.19
 
+# AWS SDK for SigV4 authentication in Strands A2A Client
+# REQUIRED: AgentCore Runtime does NOT have boto3 pre-installed (unlike Lambda)
+# Used by shared/strands_a2a_client.py for AWSSigV4HTTPXAuth bridge
+boto3>=1.28.0
+
 # A2A Server dependencies
 uvicorn>=0.30.0
 fastapi>=0.115.0
@@ -65,3 +70,14 @@ pandas>=2.0.0
 # Pure Python library (~100KB), generates safe Git branch names from error descriptions
 # Used by agents/specialists/repair/tools/git_ops.py for branch name generation
 python-slugify>=8.0.0
+
+# Jinja2 for secure prompt templating (shared/prompt_templates.py)
+# Used for LLM prompt rendering with input sanitization
+# Part of 5-Pillar Compliance Framework (AI Agent Best Practices)
+jinja2>=3.0.0
+
+# Structured logging for Smart Import flow visibility (shared/flow_logger.py)
+# Provides JSON-formatted logs to CloudWatch with PII-safe count-only pattern
+# Used for debugging 5-phase pipeline: Analyze → Map → Transform → Observe
+# PINNED to 24.1.0 for stable API (context managers, processors, renderers)
+structlog==24.1.0

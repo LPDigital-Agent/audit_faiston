@@ -21,7 +21,7 @@
 # VERSION: 2026-01-22T00:00:00Z (Phase 5 initial)
 # =============================================================================
 
-from .main import (
+from agents.specialists.observation.main import (
     AGENT_ID,
     AGENT_NAME,
     AGENT_PORT,

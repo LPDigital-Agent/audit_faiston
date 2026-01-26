@@ -77,6 +77,10 @@ async def search_stackoverflow_tool(
             tags=["python", "json"],
             max_results=3
         )
+
+    Raises:
+        httpx.TimeoutException: If Stack Exchange API request times out (caught internally).
+        httpx.HTTPStatusError: If Stack Exchange API returns error status (caught internally).
     """
     logger.info(
         "[search_stackoverflow] BUG-034: Fetching real SO answers for: %s",

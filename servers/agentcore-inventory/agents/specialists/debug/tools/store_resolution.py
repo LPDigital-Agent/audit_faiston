@@ -75,6 +75,9 @@ async def store_resolution_tool(
 
     Returns:
         Storage result with pattern ID
+
+    Raises:
+        MemoryError: If AgentCore Memory save fails (caught internally, returns error dict).
     """
     logger.info(f"[store_resolution] Storing: {error_type} ({success})")
 

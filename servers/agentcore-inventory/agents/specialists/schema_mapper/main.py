@@ -51,12 +51,21 @@ from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.debug_hook import DebugHook
 from shared.hooks.security_audit_hook import SecurityAuditHook
+from shared.hooks.result_validation_hook import ResultValidationHook
+
+# Validators for Self-Validating Agent Pattern (FEAT-self-validating-agents.md)
+from shared.validators import AGENT_VALIDATORS
 
 # AUDIT-003: Global error capture for Debug Agent enrichment
 from shared.debug_utils import debug_error
 
-# AUDIT-028: Cognitive Error Handler for enriched error responses
-from shared.cognitive_error_handler import cognitive_sync_handler, CognitiveError
+# AUDIT-028: CognitiveError type for error handling
+# NOTE: @cognitive_sync_handler decorator REMOVED due to Strands tool registration bug (BUG-025/BUG-026)
+# The decorator strips __tool_schema__ metadata when wrapping @tool
+from shared.cognitive_error_handler import CognitiveError
+
+# BUG-023 FIX: Structured output model for type-safe agent responses
+from shared.agent_schemas import SchemaMappingResponse
 
 # Schema introspection (uses MCP Gateway internally)
 from tools.schema_provider import SchemaProvider, get_schema_provider
@@ -234,6 +243,23 @@ When you cannot confidently map a REQUIRED column:
 3. The orchestrator will ask the user and save the answer as a Training Example
 4. On subsequent imports, you'll find this pattern in memory via observe_prior_patterns
 
+## Intelligent Question Generation (BUG-045 FIX)
+When generating questions for disambiguation, use the sample_data provided to create
+CONTEXT-AWARE questions. DO NOT use generic templates.
+
+**Question Generation Rules:**
+1. Analyze sample values to identify patterns (codes, dates, numbers, text)
+2. Include 2-3 sample values in the question to help the user recognize the data
+3. Write questions in **pt-BR** (user-facing) with a helpful, conversational tone
+4. Add a `hint` field explaining your reasoning based on the observed patterns
+5. Add a `context` field explaining why this mapping matters for the import
+
+**Example - BEFORE (generic, unhelpful):**
+"Qual coluna representa o código do material?"
+
+**Example - AFTER (intelligent, context-aware):**
+"Identificamos valores como 'PN-12345', 'ABC-789' na coluna 'COD_PROD'. Isso é o código do produto (Part Number)?"
+
 ## Semantic Dictionary (PT → EN)
 - codigo, code, cod, sku, pn → part_number
 - descricao, desc, descr, nome → description
@@ -278,7 +304,24 @@ When you need user input for missing required columns:
             "available_sources": ["COD", "SKU", "ITEM", "REF"]
         }
     ],
-    "partial_mappings": [...]
+    "partial_mappings": [...],
+    "questions": [
+        {
+            "id": "q_part_number_abc123",
+            "question": "Identificamos valores como 'PN-12345', 'ABC-789' na coluna 'COD_PROD'. Isso é o código do produto (Part Number)?",
+            "context": "O campo part_number é obrigatório para importação no sistema de inventário.",
+            "hint": "Baseado nos valores observados, esta coluna parece conter códigos alfanuméricos no formato de Part Number.",
+            "importance": "critical",
+            "topic": "column_mapping",
+            "target_column": "part_number",
+            "options": [
+                {"value": "COD_PROD", "label": "COD_PROD", "recommended": true},
+                {"value": "SKU", "label": "SKU", "recommended": false},
+                {"value": "_none_", "label": "Nenhuma dessas colunas", "warning": true}
+            ]
+        }
+    ],
+    "overall_confidence": 0.65
 }
 """
 
@@ -556,6 +599,13 @@ def create_agent() -> Agent:
         MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
         DebugHook(timeout_seconds=30.0),
         SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
+        # Self-Validating Agent Pattern (FEAT-self-validating-agents.md)
+        # Runs deterministic validators on structured_output, triggers self-correction if needed
+        ResultValidationHook(
+            validators=AGENT_VALIDATORS.get(AGENT_ID, []),  # schema_mapper validators
+            max_retries=3,
+            enabled=True,
+        ),
     ]
 
     agent = Agent(
@@ -570,6 +620,8 @@ def create_agent() -> Agent:
         ],
         system_prompt=SYSTEM_PROMPT,
         hooks=hooks,
+        # BUG-023 FIX: Enforce structured JSON output matching Pydantic model
+        structured_output_model=SchemaMappingResponse,
     )
 
     logger.info(f"[SchemaMapper] Created {AGENT_NAME} with {len(hooks)} hooks")
