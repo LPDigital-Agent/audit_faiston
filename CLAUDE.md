@@ -29,6 +29,10 @@ To be used on web research we are in year 2026.
 
 - **AGENT RUNTIME (MANDATORY):** ALL agents run on **AWS Bedrock AgentCore** (Runtime + Memory + Gateway + Observability + Security).
 
+- **A2A VIA STRANDS ONLY (IMMUTABLE & MEGA MANDATORY):** ALL Agent-to-Agent (A2A) communication MUST be done via **Strands Framework** (`A2AClientToolProvider` or `A2ACardResolver`) running on **AgentCore Runtime**. Direct HTTP calls between agents or custom A2A implementations are **STRICTLY FORBIDDEN**. This ensures protocol compliance, discovery, and observability.
+  - Strands A2A Protocol: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
+  - Use `strands_tools.a2a_client.A2AClientToolProvider` for agent orchestration
+
 ## 2) LLM Policy (IMMUTABLE)
 
 - **LLM POLICY (IMMUTABLE & MANDATORY):** Keep the existing rule exactly as currently defined:
@@ -40,6 +44,10 @@ To be used on web research we are in year 2026.
     - https://ai.google.dev/gemini-api/docs/gemini-3
     - https://ai.google.dev/gemini-api/docs/thinking
     - https://ai.google.dev/gemini-api/docs/files
+
+- **GEMINI VIA STRANDS ONLY (IMMUTABLE & MEGA MANDATORY):** ALL Gemini model usage MUST be done via **Strands Framework** (`strands.models.gemini.GeminiModel`). Direct Google AI API calls are **STRICTLY FORBIDDEN**. This ensures consistent agent patterns, observability, and AgentCore integration.
+  - Strands Gemini Provider: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/model-providers/gemini/
+  - Install: `pip install 'strands-agents[gemini]'`
 
 ## 3) Source of Truth & Recency (IMMUTABLE)
 
@@ -93,72 +101,53 @@ To be used on web research we are in year 2026.
   - Region: `us-east-2`
   - AWS CLI profile MUST be `faiston-aio` (always pass `--profile faiston-aio`).
 - **INFRA (MANDATORY):** Terraform ONLY. No CloudFormation/SAM. No local deploys. GitHub Actions only.
-- **INVENTORY DATASTORE (CRITICAL):** Inventory table MUST be Aurora PostgreSQL (RDS). DynamoDB is forbidden for inventory data.
+- **DATASTORE POLICY (CRITICAL):**
+  - **Aurora PostgreSQL (RDS):** ONLY for inventory business data — inventory control, stock movements, item flows, part numbers, locations, projects, postings. This is the CORE BUSINESS datastore.
+  - **DynamoDB:** EVERYTHING ELSE — audit logs, metrics, agent sessions, Agent Room events, HIL tasks, debug analytics, observability data. DynamoDB is preferred for operational/observability data.
+  - **Rule:** If it's inventory business logic → Aurora. If it's system operations/observability → DynamoDB.
 - **SDLC + CLEAN CODE + PYTHON (MANDATORY):** Follow SDLC, Clean Code, and Python best practices (tests, CI/CD, lint/format, types where applicable, maintainable code).
 - **SECURITY (MANDATORY):** Security-first + pentest-ready (OWASP/NIST/MITRE/CIS/AWS Security/Microsoft SDL).
 
-## 🧠 LLM = BRAIN / PYTHON = HANDS (MANDATORY ENGINEERING PRINCIPLE)
+## 🧠 LLM = BRAIN / PYTHON = HANDS (MANDATORY)
 
-Research across agentic frameworks (LangChain, Semantic Kernel, AutoGen) and engineering best practices (OpenAI/Anthropic) converges on a reliable pattern:
+- **LLM = "Brain"** → reasoning, planning, intent extraction
+- **Python = "Hands"** → deterministic execution, parsing, validation, networking
 
-- **LLM = "Brain"** → decision-making, reasoning, planning, intent extraction  
-- **Python = "Hands"** → deterministic execution, parsing, validation, networking, retries
+**Key Patterns:**
+- **Sandwich Pattern:** CODE → LLM → CODE (pre-process, reason, validate)
+- **Tool-First:** Prefer Python functions over sub-agents when deterministic logic suffices
+- **No Raw Data:** Never load full files into LLM context; use S3 references + Python processing
+- **Lambda as Hands:** Deterministic operations (S3 presigned URLs, file validation, data parsing) SHOULD be extracted to Lambda microservices. Orchestrator coordinates, Lambda executes. This is NOT traditional microservices—it's "Agentic Hands" pattern.
 
-This principle MUST be used to ensure **reliability, cost-efficiency, and speed**.
+**Full Details:** `docs/AGENTIC_ENGINEERING_PRINCIPLES.md`
 
----
+9) GITHUB and DEPLOY (IMMUTABLE)
 
-### 1) HTTP Requests & Responses — **Python (Deterministic)**
+- BUG TRACKING (MANDATORY): Every bug MUST be recorded as a **GitHub Issue** (no exceptions). The issue MUST be kept updated during investigation and implementation (notes, repro steps, findings, commits/PR links). When the bug is fixed and verified, the issue MUST be **closed** with a final resolution summary.
 
-**Verdict:** Python Code (Deterministic)
+## 10) Python Engineering (IMMUTABLE)
 
-**Why:** LLMs do not actually execute network calls; they can hallucinate request/response formats. Asking an LLM to “perform a GET request” is unreliable.
+- **TYPE HINTS (MANDATORY):** All public functions MUST have type annotations (params + return). Use native generics (`list[str]`, not `List[str]`). Use `X | None` (not `Optional[X]`).
+- **DOCSTRINGS (MANDATORY):** Google-style docstrings on all public APIs. Required sections: Args, Returns, Raises.
+- **ERROR HANDLING (MANDATORY):** Specific exceptions only. NEVER use bare `except:`. Use `logging.exception()` for stack traces.
+- **TESTING (MANDATORY):** pytest with 80%+ meaningful coverage. Test pyramid: 50% unit, 30% integration, 20% e2e.
+- **SECURITY (MANDATORY):** OWASP 2025 patterns. No hardcoded secrets. Input validation at all entry points. Parameterized queries only.
+- **TOOLING (MANDATORY):** ruff for linting/formatting, uv/poetry for dependencies. pip-audit for security scanning.
+- **CLEAN CODE (MANDATORY):** SOLID principles. Functions do ONE thing. No mutable default arguments. No `print()` (use logging).
 
-**Best Practice: Tool Use Pattern**
-- **LLM (Reasoning):** decides which API/tool to call and the parameters  
-  Example intent: `{"tool": "get_weather", "city": "London"}`
-- **Python (Execution):** performs the real call (`requests`/`httpx`), handles auth, headers, retries
-- **Python (Error Handling):** catches failures (e.g., 500), then returns the error back to the LLM so it can choose the next step (retry, fallback source, HIL)
+**Full Details:** `.claude/rules/infrastructure/python-best-practices.md`, `.claude/rules/infrastructure/python-security.md`
 
----
+## 11) AI Agent Engineering (IMMUTABLE)
 
-### 2) JSON Parsing — **Python (Deterministic)**
+- **ARCHITECTURE (MANDATORY):** ReAct as default pattern. Multi-agent only when domain expertise separation is needed.
+- **TOOL DESIGN (MANDATORY):** < 20 tools per agent (HARD LIMIT). Clear docstrings (agents decide based on these). Structured Pydantic outputs.
+- **MEMORY (MANDATORY):** AgentCore memory (STM/LTM) ONLY. NO custom memory implementations without explicit approval.
+- **HIL (MANDATORY):** Human-in-the-Loop for high-impact actions (DELETE, financial, bulk operations). Confidence-based escalation.
+- **A2A (MANDATORY):** Strands A2A protocol ONLY (`A2AClientToolProvider`). No direct HTTP between agents.
+- **OBSERVABILITY (MANDATORY):** OpenTelemetry instrumentation for all agent operations. Trace tool calls and decision steps.
+- **ANTI-PATTERNS (FORBIDDEN):** God Agent (one agent does everything), Chatty Agents (text-based inter-agent comms), Cascading Failures (no circuit breakers), Stateless Assumption (no memory).
 
-**Verdict:** Python Code
-
-**Why:** API JSON is already structured. Feeding large JSON into an LLM is slow, expensive, and prone to hallucinating keys.
-
-**Best Practices**
-- **Always parse JSON in Python:** `json.loads()` (fast + accurate)
-- **Filter in Python first:** if the payload is large (e.g., 5MB), reduce to relevant fields BEFORE sending to LLM (saves tokens, improves focus)
-
----
-
-### 3) Data Extraction — **Hybrid (Context Dependent)**
-
-**Verdict:** Depends on the source
-
-**Scenario A: Unstructured text (PDF, emails, HTML) → LLM**
-- Regex-only approaches are brittle for messy human text
-- Use the LLM for extraction BUT enforce **structured outputs** (e.g., Pydantic schemas) so the result is clean JSON
-
-**Scenario B: Structured data (Excel, API JSON) → Python**
-- Do NOT send huge tables (e.g., 10k rows) to the LLM just to find fields/columns
-- Use Python (`pandas`, native logic) to locate/filter/aggregate first
-
----
-
-## 🥪 Recommended Architecture: "Sandwich Pattern" (MANDATORY)
-
-Production-grade agentic workflows MUST follow:
-
-**CODE → LLM → CODE**
-
-- **Code (Preparation):** networking, auth, HTML cleaning, pre-filtering, normalization  
-- **LLM (Reasoning):** analyze clean inputs, infer intent/meaning, decide actions  
-- **Code (Validation):** validate output types/constraints (dates, enums, integers, schemas) before persisting or executing actions
-
----
+**Full Details:** `.claude/rules/agents/ai-agent-best-practices.md`
 
 <!-- ===================================================== -->
 <!-- 🔒 END OF IMMUTABLE BLOCK                             -->
@@ -166,16 +155,56 @@ Production-grade agentic workflows MUST follow:
 
 ## Progressive Disclosure Index (MANDATORY)
 
-Read these ONLY when relevant (do not paste their contents into root CLAUDE.md):
+Read these ONLY when relevant (just-in-time loading). Do NOT paste contents into root CLAUDE.md.
 
-- **NEXO / Smart Import architecture:** `docs/SMART_IMPORT_ARCHITECTURE.md`
-- **Auth architecture:** `docs/AUTHENTICATION_ARCHITECTURE.md`
-- **Orchestrator pattern:** `docs/ORCHESTRATOR_ARCHITECTURE.md`
-- **Canonical request flow:** keep full diagrams/tables in `docs/REQUEST_FLOW.md`
-- **AgentCore memory deep dive:** `docs/AGENTCORE_MEMORY.md`
-- **Terraform AgentCore resources:** `docs/TERRAFORM_AGENTCORE.md`
-- **Claude Code hooks:** `docs/Claude Code/HOOKS.md`
-- **Context snapshot:** `docs/CONTEXT_SNAPSHOT.md`
-- **Worklog:** `docs/WORKLOG.md`
-- **Strands Structured Output (AUDIT-001):** `docs/adr/ADR-005-strands-structured-output.md`
-- **Agent Response Schemas:** `server/agentcore-inventory/shared/agent_schemas.py`
+### Architecture (Design tasks)
+
+| Document | When to Load |
+|----------|--------------|
+| `docs/AGENTIC_ENGINEERING_PRINCIPLES.md` | LLM/Python split, Sandwich Pattern |
+| `docs/ORCHESTRATOR_ARCHITECTURE.md` | Agent routing, A2A protocol |
+| `docs/SMART_IMPORT_ARCHITECTURE.md` | NEXO import feature |
+| `docs/REQUEST_FLOW.md` | Request flow (stub → Orchestrator) |
+| `docs/AUTHENTICATION_ARCHITECTURE.md` | Auth/Cognito design |
+
+### AgentCore (Agent development)
+
+| Document | When to Load |
+|----------|--------------|
+| `docs/AgentCore/IMPLEMENTATION_GUIDE.md` | AgentCore development |
+| `docs/AGENTCORE_MEMORY.md` | Memory STM/LTM patterns |
+| `docs/adr/ADR-005-strands-structured-output.md` | Structured output |
+| `docs/TERRAFORM_AGENT_DEPLOYMENT.md` | Terraform deploy |
+
+### Python Engineering (Code Quality)
+
+| Document | When to Load |
+|----------|--------------|
+| `.claude/rules/infrastructure/python-best-practices.md` | Python development, code review, refactoring |
+| `.claude/rules/infrastructure/python-security.md` | Security audit, secure development, OWASP compliance |
+| `docs/AGENTIC_ENGINEERING_PRINCIPLES.md` | LLM/Python split, Sandwich Pattern |
+
+### AI Agent Engineering (Agent Development)
+
+| Document | When to Load |
+|----------|--------------|
+| `.claude/rules/agents/ai-agent-best-practices.md` | Agent development, multi-agent orchestration, tool design |
+| `.claude/rules/agents/strands-framework.md` | Strands-specific patterns, Gemini integration |
+| `.claude/rules/agents/cognitive-error-handler.md` | Error enrichment pattern, DebugAgent integration |
+
+### Operations (Debug/Deploy)
+
+| Document | When to Load |
+|----------|--------------|
+| `docs/TROUBLESHOOTING.md` | Error debugging |
+| `docs/Claude Code/HOOKS.md` | Claude Code hooks |
+| `docs/CONTEXT_SNAPSHOT.md` | Current session state |
+| `docs/WORKLOG.md` | Recent activity log |
+
+### Code Reference (Symbol lookup)
+
+| Symbol | Purpose |
+|--------|---------|
+| `server/agentcore-inventory/shared/agent_schemas.py` | Response schemas |
+| `server/agentcore-inventory/shared/hooks/security_audit_hook.py` | Security hook (FAIL-CLOSED) |
+| `server/agentcore-inventory/agents/specialists/repair/main.py` | RepairAgent (Software Surgeon) |

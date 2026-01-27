@@ -4,7 +4,7 @@ This module contains tools for the initial file intake and analysis phase
 (Phase 2) of the NEXO Cognitive Import Pipeline.
 
 Tools:
-    analyze_file_structure: Analyze uploaded inventory file structure via MCP.
+    analyze_file_structure: Analyze uploaded inventory file structure (LOCAL function).
 """
 
 import json
@@ -12,7 +12,7 @@ import logging
 
 from strands import tool
 
-from agents.orchestrators.inventory_hub.config import get_mcp_file_analyzer
+from core_tools.library.file_processing import get_file_inspector
 from shared.debug_utils import debug_error
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 def analyze_file_structure(s3_key: str) -> str:
     """
     Analyze the structure of an uploaded inventory file.
+
+    THIS IS A LOCAL PYTHON FUNCTION - NOT an MCP agent call.
+    The analysis runs directly in this container using FileInspector.
 
     Use this AFTER verifying the file exists with verify_file_availability.
 
@@ -65,11 +68,10 @@ def analyze_file_structure(s3_key: str) -> str:
 
         logger.info(f"[InventoryHub] Analyzing file structure for {s3_key}")
 
-        mcp_client = get_mcp_file_analyzer()
-        parsed = mcp_client.call_tool(
-            tool_name="SGAFileAnalyzer___analyze_file_structure",
-            arguments={"s3_key": s3_key},
-        )
+        # LOCAL execution via FileInspector (not MCP Gateway)
+        inspector = get_file_inspector()
+        result = inspector.inspect_s3_file(bucket=None, key=s3_key)
+        parsed = result.to_dict()
 
         # Log outcome based on parsed result
         if parsed.get("success"):

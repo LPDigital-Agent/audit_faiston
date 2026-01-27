@@ -42,7 +42,7 @@
 # - Changed from BedrockAgentCoreApp (HTTP, port 8080) to A2AServer (A2A, port 9000)
 # - AgentCore expects A2A servers on port 9000 at root path (/)
 #
-# VERSION: 2026-01-27T05:30:00Z (BUG-035 A2A migration)
+# VERSION: 2026-01-27T15:30:00Z (BUG-039 force redeploy - container 403 fix)
 # =============================================================================
 
 # =============================================================================
