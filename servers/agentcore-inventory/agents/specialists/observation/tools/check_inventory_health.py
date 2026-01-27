@@ -261,7 +261,7 @@ def check_inventory_health(actor_id: str) -> str:
     """
     try:
         # Import postgres client
-        from tools.postgres_client import SGAPostgresClient
+        from core_tools.postgres_client import SGAPostgresClient
         db = SGAPostgresClient()
 
         anomaly_counts: Dict[str, int] = {}

@@ -39,7 +39,7 @@ from shared.env_config import get_required_env
 APP_NAME = "faiston-sga-inventory"
 
 # Agent version for tracking
-AGENT_VERSION = "2026.01.04.v1"
+AGENT_VERSION = "2026.01.27.v1"
 
 # =============================================================================
 # Gemini 2.5 Model Configuration (TEMPORARY WORKAROUND)

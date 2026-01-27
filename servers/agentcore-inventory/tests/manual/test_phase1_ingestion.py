@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import requests
 
-from tools.s3_client import SGAS3Client
+from core_tools.s3_client import SGAS3Client
 
 
 class TestColors:

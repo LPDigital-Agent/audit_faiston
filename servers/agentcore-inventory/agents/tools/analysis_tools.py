@@ -18,7 +18,7 @@ from typing import Optional
 from strands import tool
 
 from shared.cognitive_error_handler import cognitive_sync_handler
-from tools.library.file_processing import FileInspector, get_file_inspector
+from core_tools.library.file_processing import FileInspector, get_file_inspector
 
 # Module-level AGENT_ID for shared analysis tools
 # Errors will be attributed to this module and include calling context

@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 from strands import tool
 
 # MCP Gateway client (uses IAM SigV4 auth per AWS best practices)
-from tools.mcp_gateway_client import MCPGatewayClient, MCPGatewayClientFactory
+from core_tools.mcp_gateway_client import MCPGatewayClient, MCPGatewayClientFactory
 
 # FAIL-CLOSED environment configuration (no production fallbacks)
 from shared.env_config import get_required_env

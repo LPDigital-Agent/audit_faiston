@@ -21,7 +21,7 @@
 # trying to import from root tools/s3_client.py), Python may not find it.
 #
 # This explicit path setup ensures the deployment root is always searchable,
-# allowing absolute imports like `from tools.s3_client import ...` to work.
+# allowing absolute imports like `from core_tools.s3_client import ...` to work.
 #
 # NOTE: This is NOT a heavy import - just path manipulation (< 1ms).
 # It doesn't violate the "lazy imports" principle.

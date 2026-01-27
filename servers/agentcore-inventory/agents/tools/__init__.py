@@ -20,20 +20,8 @@
 # =============================================================================
 
 # =============================================================================
-# BUG-032 FIX (Part 2): Ensure deployment root is in sys.path
-# =============================================================================
-# This module imports from intake_tools.py which imports from root tools/s3_client.py
-# The sys.path fix MUST happen BEFORE that import chain executes.
-#
-# NOTE: This is a DUPLICATE of the fix in agents/__init__.py because Python
-# import chain for nested packages doesn't guarantee parent __init__.py runs first.
-# =============================================================================
-import os
-import sys
-
-_deployment_root = os.environ.get("LAMBDA_TASK_ROOT", os.getcwd())
-if _deployment_root not in sys.path:
-    sys.path.insert(0, _deployment_root)
+# BUG-037 FIX: Namespace collision resolved by renaming tools/ → core_tools/
+# The sys.path workaround is no longer needed.
 # =============================================================================
 
 from .intake_tools import (

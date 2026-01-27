@@ -19,12 +19,19 @@
 # VERSION: 2026-01-21T18:00:00Z
 # =============================================================================
 
-from .main import app, create_inventory_hub, invoke, AGENT_ID, AGENT_NAME
+# BUG-035: Migrated from BedrockAgentCoreApp to A2AServer
+# - Removed: 'app' (BedrockAgentCoreApp - no longer used)
+# - Added: 'create_app' (FastAPI factory for A2AServer)
+# - Changed: AGENT_ID, AGENT_NAME now come from config submodule (lazy import)
+
+from .main import create_inventory_hub, invoke, create_app, _start_server
+from .config import AGENT_ID, AGENT_NAME
 
 __all__ = [
-    "app",
     "create_inventory_hub",
     "invoke",
+    "create_app",
+    "_start_server",
     "AGENT_ID",
     "AGENT_NAME",
 ]

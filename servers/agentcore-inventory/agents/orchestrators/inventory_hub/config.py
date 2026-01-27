@@ -127,12 +127,12 @@ def get_mcp_file_analyzer():
 
         try:
             # Now import from root tools/ (not agents/tools/)
-            from tools.mcp_gateway_client import MCPGatewayClientFactory
+            from core_tools.mcp_gateway_client import MCPGatewayClientFactory
 
             logger.debug("[config] Initializing MCP Gateway client for file analyzer")
             _mcp_file_analyzer = MCPGatewayClientFactory.create_from_env()
         except ImportError as e:
-            logger.error(f"[config] Failed to import tools.mcp_gateway_client: {e}")
+            logger.error(f"[config] Failed to import core_tools.mcp_gateway_client: {e}")
             raise
 
     return _mcp_file_analyzer

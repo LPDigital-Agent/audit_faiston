@@ -55,7 +55,7 @@ def test_direct_client():
     print("=" * 60)
 
     try:
-        from tools.postgres_client import SGAPostgresClient
+        from core_tools.postgres_client import SGAPostgresClient
 
         client = SGAPostgresClient()
 
@@ -158,7 +158,7 @@ def test_invalid_entry_id():
     print("=" * 60)
 
     try:
-        from tools.postgres_client import SGAPostgresClient
+        from core_tools.postgres_client import SGAPostgresClient
 
         client = SGAPostgresClient()
 
@@ -213,12 +213,12 @@ def test_mcp_gateway():
     print("=" * 60)
 
     try:
-        from tools.mcp_gateway_client import MCPGatewayClientFactory
+        from core_tools.mcp_gateway_client import MCPGatewayClientFactory
 
         client = MCPGatewayClientFactory.create_from_env()
 
         # First create a test entry via direct client
-        from tools.postgres_client import SGAPostgresClient
+        from core_tools.postgres_client import SGAPostgresClient
         pg_client = SGAPostgresClient()
 
         test_entry_id = str(uuid.uuid4())

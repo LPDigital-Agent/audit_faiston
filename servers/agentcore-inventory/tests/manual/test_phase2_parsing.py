@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import boto3
 from botocore.config import Config
 
-from tools.library.file_processing import FileInspector, FileStructure, get_file_inspector
+from core_tools.library.file_processing import FileInspector, FileStructure, get_file_inspector
 
 
 class TestColors:

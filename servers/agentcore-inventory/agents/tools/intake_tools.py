@@ -19,11 +19,8 @@
 # VERSION: 2026-01-21T18:00:00Z - Phase 1 Secure File Ingestion
 # =============================================================================
 
-import importlib
 import json
 import logging
-import os
-import sys
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -31,33 +28,10 @@ from typing import Optional
 from strands import tool
 
 # =============================================================================
-# BUG-032 FIX (Part 4): Use __file__ to compute absolute path to tools/
+# BUG-037 FIX: Namespace collision resolved by renaming tools/ → core_tools/
+# The importlib.util workaround is no longer needed. Direct import works now.
 # =============================================================================
-# Previous fixes (Parts 1-3) relied on sys.path which doesn't work reliably
-# in AgentCore runtime. This fix uses __file__ to compute the absolute path
-# to the root tools/ directory from this file's location.
-#
-# File location: /var/task/agents/tools/intake_tools.py
-# Target module: /var/task/tools/s3_client.py
-# Path from here: ../../tools/s3_client.py (up 2 levels, then into tools/)
-# =============================================================================
-import importlib.util
-
-# Get absolute path to this file's directory
-_this_dir = os.path.dirname(os.path.abspath(__file__))
-# Navigate up to /var/task (agents/tools/ → agents/ → root)
-_root_dir = os.path.dirname(os.path.dirname(_this_dir))
-# Target module path
-_s3_client_path = os.path.join(_root_dir, "tools", "s3_client.py")
-
-# Load module directly from file path using importlib.util
-_spec = importlib.util.spec_from_file_location("tools.s3_client", _s3_client_path)
-_s3_client_module = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_s3_client_module)
-
-SGAS3Client = _s3_client_module.SGAS3Client
-S3ClientError = _s3_client_module.S3ClientError
-# =============================================================================
+from core_tools.s3_client import SGAS3Client, S3ClientError
 
 # Shared utilities
 from shared.debug_utils import debug_error
