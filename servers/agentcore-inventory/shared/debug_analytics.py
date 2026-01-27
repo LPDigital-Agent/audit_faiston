@@ -1,7 +1,7 @@
 # =============================================================================
 # Debug Analytics Module for SGA
 # =============================================================================
-# Created for BUG-027: Debug Agent Validation & Enhancement
+# Debug Agent Validation & Enhancement module
 #
 # Multi-destination analytics for Debug Agent user actions:
 # 1. CloudWatch Metrics - Real-time dashboards

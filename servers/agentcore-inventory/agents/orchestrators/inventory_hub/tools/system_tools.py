@@ -31,7 +31,7 @@ def health_check() -> str:
     Returns:
         JSON string with health status, version, and capabilities.
     """
-    # Lazy import to break circular dependency (BUG-031 fix)
+    # Lazy import to break circular dependency
     # config.py imports tools/__init__.py which imports system_tools.py
     # If we import config at module level, we get circular import crash
     from agents.orchestrators.inventory_hub.config import AGENT_ID, AGENT_NAME, RUNTIME_ID

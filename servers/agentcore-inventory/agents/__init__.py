@@ -14,7 +14,7 @@
 # =============================================================================
 
 # =============================================================================
-# BUG-032 FIX: Ensure deployment root is in sys.path
+# Ensure deployment root in sys.path
 # =============================================================================
 # AgentCore deploys code to /var/task, and this SHOULD be in sys.path.
 # However, when importing from nested packages (e.g., agents/tools/intake_tools.py

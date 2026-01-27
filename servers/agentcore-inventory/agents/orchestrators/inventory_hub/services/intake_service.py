@@ -374,7 +374,7 @@ def _handle_nexo_analyze_file(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     # ===========================================================================
-    # BUG-022/BUG-023 FIX: Call Phase 3 (SchemaMapper) after Phase 2 succeeds
+    # Phase transition: Call Phase 3 (SchemaMapper) after Phase 2 succeeds
     # Previously this function returned immediately, leaving column_mappings empty.
     # Now we invoke SchemaMapper to get column mappings and/or HIL questions.
     # ===========================================================================

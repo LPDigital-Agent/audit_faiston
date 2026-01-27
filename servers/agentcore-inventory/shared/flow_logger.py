@@ -101,7 +101,7 @@ class SmartImportLogger:
         Log a key decision or milestone within a phase.
 
         Use for:
-        - BUG-045 verification (questions_count)
+        - questions_count verification
         - Mapping proposals (mappings_count, confidence)
         - Transform progress (rows_processed, rows_rejected)
         - Pattern detection (insights_count, severity)

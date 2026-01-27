@@ -1,5 +1,5 @@
 # =============================================================================
-# DebugAgent Tool: search_stackoverflow (BUG-034)
+# DebugAgent Tool: search_stackoverflow - Real-time External Search
 # =============================================================================
 # Real-time Stack Exchange API integration for error debugging.
 #
@@ -16,8 +16,8 @@
 # - 300 requests per day per IP
 # - Compressed responses are gzipped
 #
-# BUG-034: This tool enables the Debug Agent to find community-sourced
-# solutions for errors, making debug_analysis more actionable.
+# This tool enables the Debug Agent to find community-sourced solutions
+# for errors, making debug_analysis more actionable.
 # =============================================================================
 
 import gzip
@@ -83,7 +83,7 @@ async def search_stackoverflow_tool(
         httpx.HTTPStatusError: If Stack Exchange API returns error status (caught internally).
     """
     logger.info(
-        "[search_stackoverflow] BUG-034: Fetching real SO answers for: %s",
+        "[search_stackoverflow] Fetching real SO answers for: %s",
         query[:80]
     )
 

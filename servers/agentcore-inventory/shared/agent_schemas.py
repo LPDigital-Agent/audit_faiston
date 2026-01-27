@@ -345,14 +345,14 @@ class MissingRequiredField(BaseModel):
 
 
 # =============================================================================
-# NEXO File Analysis Response Models (BUG-022 Fix)
+# NEXO File Analysis Response Models - Type-safe response contracts
 # =============================================================================
 
 class NexoSheetData(BaseModel):
     """
     Single sheet structure from file analysis.
 
-    BUG-022 FIX: Standardized nested structure matching TypeScript interface.
+    Schema evolution support: Standardized nested structure matching TypeScript interface.
     Used for CSV/TXT files (single sheet) and Excel files (multiple sheets).
     """
     columns: List[str] = Field(
@@ -373,7 +373,7 @@ class NexoAnalysisData(BaseModel):
     """
     Nested analysis structure matching frontend NexoAnalyzeFileResponse contract.
 
-    BUG-022 FIX: Enforces consistent nested structure across all code paths.
+    Type-safe response contracts: Enforces consistent nested structure across all code paths.
     Previously, Mode 2.5 returned flat structure causing frontend normalization.
     """
     sheets: List[NexoSheetData] = Field(
@@ -395,7 +395,7 @@ class NexoAnalyzeFileResponse(BaseModel):
     """
     Complete NEXO file analysis response matching TypeScript interface.
 
-    BUG-022 FIX: Type-safe contract between backend and frontend.
+    Type-safe response contracts: Ensures contract between backend and frontend.
     Replaces ad-hoc dict structures with validated Pydantic model.
 
     TypeScript contract location:
@@ -650,7 +650,7 @@ class RepairResponse(AgentResponseBase):
     # Git operations
     branch_name: Optional[str] = Field(
         default=None,
-        description="Git branch where fix was committed (e.g., 'fix/BUG-044-validation-error')"
+        description="Git branch where fix was committed (e.g., 'fix/issue-123-validation-error')"
     )
     commit_sha: Optional[str] = Field(
         default=None,

@@ -77,7 +77,7 @@ from shared.debug_utils import (
     debug_aws_error,
 )
 
-# Message Utils exports (BUG-039: Strands Message Extraction)
+# Message Utils exports - Strands message extraction utilities
 from shared.message_utils import (
     extract_text_from_message,
     safe_message_lower,
@@ -140,7 +140,7 @@ __all__ = [
     "debug_json_error",
     "debug_http_error",
     "debug_aws_error",
-    # Message Utils (BUG-039: Strands Message Extraction)
+    # Message Utils - Strands message extraction utilities
     "extract_text_from_message",
     "safe_message_lower",
     # Prompt Templates (AI Agent Best Practices - Pillar 5)

@@ -550,9 +550,9 @@ class SGADynamoDBClient:
 
         Returns:
             Balance dict with total, available, reserved.
-            CRITICAL (BUG-022 v9): Returns `found: False` when item doesn't exist
-            instead of zeros. This allows callers to distinguish between
-            "no data" and "zero quantity" - preventing silent data loss.
+            CRITICAL: Return found: False for missing items - returns `found: False`
+            when item doesn't exist instead of zeros. This allows callers to
+            distinguish between "no data" and "zero quantity" - preventing silent data loss.
         """
         pk = f"BALANCE#{location_id}#{pn_id}"
         sk = f"PROJ#{project_id}" if project_id else "METADATA"
@@ -570,7 +570,7 @@ class SGADynamoDBClient:
                 "project_id": project_id,
             }
 
-        # BUG-022 v9 FIX (CRITICAL-T1): Return found=False instead of zeros!
+        # Return found: False for missing items - return found=False instead of zeros!
         # Returning zeros on "not found" is DANGEROUS - it's indistinguishable
         # from "item exists with zero stock", causing silent data corruption.
         logger.debug(
@@ -769,7 +769,7 @@ class SGADynamoDBClient:
             )
         else:
             return hil_client.query_gsi(
-                gsi_name="GSI2-StatusQuery",
+                gsi_name="GSI2",
                 pk_value="STATUS#PENDING",
                 limit=limit,
                 scan_forward=False  # Most recent first

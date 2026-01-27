@@ -7,7 +7,7 @@
 # TEMPORARY: Using Gemini 2.5 (Strands SDK thoughtSignature issue #1199)
 #
 # API Key Note:
-# GOOGLE_API_KEY is loaded from SSM Parameter Store at runtime (BUG-010 fix).
+# GOOGLE_API_KEY is loaded from SSM Parameter Store at runtime for secure credential management.
 # SSM Path: /faiston-one/academy/google-api-key
 # If env var is already set, SSM lookup is skipped.
 # =============================================================================
@@ -39,7 +39,7 @@ from shared.env_config import get_required_env
 APP_NAME = "faiston-sga-inventory"
 
 # Agent version for tracking
-AGENT_VERSION = "2026.01.27.v1"
+AGENT_VERSION = "2026.01.27.v11"  # BUG-042: Fix boto3 param name (body→payload)
 
 # =============================================================================
 # Gemini 2.5 Model Configuration (TEMPORARY WORKAROUND)
@@ -85,32 +85,53 @@ MODEL_GEMINI = MODEL_GEMINI_PRO
 #    - Speed-critical, low complexity tasks
 # =============================================================================
 
-# ROLLBACK PERF-001: All import agents restored to use Thinking mode
-# The PERF-001 optimization (removing thinking) caused response format errors.
-# Gemini without Thinking returns inconsistent structured outputs.
-# Decision: Prioritize functionality over speed.
-PRO_NO_THINKING_AGENTS: set[str] = set()  # Empty - no agents without thinking for now
+# =============================================================================
+# BUG-042 FIX: Thinking Mode + Function Calling Incompatibility
+# =============================================================================
+# Gemini 2.5 + Thinking Mode + Function Calling has a known bug where:
+# - After tool call completes, model produces EMPTY response (no text, no tool calls)
+# - This is due to thought signature handling issues between assistant/tool messages
+# - Assistant messages get 2 parts (thought signature + function call)
+# - Tool response messages get 1 part (function response only)
+# - This causes validation errors or empty responses
+#
+# References:
+# - https://discuss.ai.google.dev/t/gemini-2-5-pro-ending-the-turn-when-it-tries-calling-a-tool/78876
+# - https://discuss.ai.google.dev/t/gemini-2-5-flash-lite-empty-response-after-tool-call/108895
+# - https://github.com/googleapis/python-genai/issues/1289
+#
+# FIX: Agents that USE TOOLS (function calling) should NOT use Thinking mode.
+# Agents that do pure reasoning WITHOUT tools can use Thinking mode.
+# =============================================================================
 
-# Agents that require Pro + Thinking (deep reasoning for consistent outputs)
-# ROLLBACK PERF-001: Import agents moved back here - they need Thinking for correct JSON structure
+# Agents that need Pro model WITHOUT thinking (use function calling)
+# BUG-042: Moved tool-using agents here to avoid thinking + function calling bug
+# BUG-042-v3: inventory_hub moved to FLASH to test if Pro is the issue
+PRO_NO_THINKING_AGENTS: set[str] = {
+    # Orchestrators (use tools heavily)
+    "nexo_import",      # Main orchestrator - uses tools
+    # "inventory_hub",  # BUG-042-v3: Testing with Flash instead of Pro
+    # Import agents (use tools)
+    "intake",           # Document intake - uses tools
+    "import",           # Data import - uses tools
+    "file_analyzer",    # FileAnalyzer - uses tools
+    "vision_analyzer",  # VisionAnalyzer - uses tools
+    "file_analyst",     # FileAnalyst - uses tools
+    # Phase 2+3+4: Specialist agents (use tools)
+    "inventory_analyst",  # Phase 2 - uses analysis tools
+    "schema_mapper",      # Phase 3 - uses mapping tools
+    "data_transformer",   # Phase 4 - uses ETL tools
+}
+
+# Agents that require Pro + Thinking (pure reasoning, no/minimal tools)
+# Only agents that do REASONING without heavy tool usage should use Thinking
 PRO_THINKING_AGENTS = {
-    # Import agents (ROLLBACK - need Thinking for consistent structured outputs)
-    "nexo_import",      # Main orchestrator - needs Thinking for response structure
-    "intake",           # Document intake - needs Thinking for NF parsing
-    "import",           # Data import - needs Thinking for file structure
-    "file_analyzer",    # FileAnalyzer A2A agent - needs Thinking for analysis
-    "vision_analyzer",  # VisionAnalyzer A2A agent - needs Thinking for OCR
-    "file_analyst",     # FileAnalyst A2A agent - needs Thinking for NEXO imports
-    # Phase 2+3+4: Smart Import specialist agents (critical inventory per CLAUDE.md)
-    "inventory_analyst",  # Phase 2 - File structure analysis
-    "schema_mapper",      # Phase 3 - Semantic column mapping with learning
-    "data_transformer",   # Phase 4 - Cognitive ETL with error enrichment
-    # Reasoning agents (always used Thinking)
-    "learning",         # Memory extraction - NEEDS thinking for pattern recognition
-    "schema_evolution", # Schema analysis - NEEDS thinking for SQL generation
-    "enrichment",       # Equipment enrichment - NEEDS thinking for Tavily data reasoning
-    "debug",            # Error analysis - NEEDS thinking for root cause identification
-    "compliance",       # Audit, regulatory - NEEDS thinking for compliance rules
+    # Reasoning agents (minimal tool usage, need deep thinking)
+    "learning",         # Memory extraction - pure reasoning
+    "schema_evolution", # Schema analysis - pure reasoning
+    "enrichment",       # Equipment enrichment - reasoning over Tavily data
+    "debug",            # Error analysis - root cause reasoning
+    "compliance",       # Audit, regulatory - compliance reasoning
 }
 
 # Agents that require Pro (complex reasoning but no thinking needed)
@@ -187,10 +208,11 @@ class LazyGeminiModel:
     """
     Lazy-loading wrapper for GeminiModel to enable fast A2A server startup.
 
-    BUG-008 FIX: AgentCore requires the A2A server to respond to health checks
-    within 5-10 seconds. GeminiModel's constructor makes a blocking HTTP call
-    to Google's API (generativelanguage.googleapis.com) to validate credentials,
-    which can exceed this timeout on cold starts.
+    Lazy initialization for AgentCore cold start optimization: AgentCore requires
+    the A2A server to respond to health checks within 5-10 seconds. GeminiModel's
+    constructor makes a blocking HTTP call to Google's API
+    (generativelanguage.googleapis.com) to validate credentials, which can exceed
+    this timeout on cold starts.
 
     This wrapper defers the actual GeminiModel initialization until the first
     inference call, allowing the A2A server to start instantly and respond to
@@ -233,7 +255,7 @@ class LazyGeminiModel:
             logger = logging.getLogger(__name__)
             logger.info("[LazyGeminiModel] First request - initializing GeminiModel...")
 
-            # BUG-010 FIX: Load GOOGLE_API_KEY from SSM if not in environment
+            # Load API key from SSM at runtime for secure credential management
             # SSM Parameter: /faiston-one/academy/google-api-key
             if not os.environ.get("GOOGLE_API_KEY"):
                 logger.info("[LazyGeminiModel] GOOGLE_API_KEY not in env, loading from SSM...")
@@ -255,18 +277,17 @@ class LazyGeminiModel:
                     )
 
             # Build params
-            # BUG-011 FIX: Increased max_output_tokens from 4096 to 16384
-            # The file analysis response includes: structure, mappings, confidence scores,
-            # HIL questions, unmapped columns, and full JSON output. With the new
-            # RESPONSE FORMAT requirement (commit 09caf83), responses can easily exceed
-            # 4096 tokens, causing MaxTokensReachedException in Strands A2A.
-            # Gemini 2.5 Pro supports up to 65,536 output tokens.
+            # Large output buffer for file analysis responses: Increased max_output_tokens
+            # from 4096 to 16384. The file analysis response includes: structure, mappings,
+            # confidence scores, HIL questions, unmapped columns, and full JSON output.
+            # Responses can easily exceed 4096 tokens, causing MaxTokensReachedException
+            # in Strands A2A. Gemini 2.5 Pro supports up to 65,536 output tokens.
             # Reference: https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.5-pro
             #
-            # BUG-021 v7 FIX: REMOVED response_mime_type: "application/json"
-            # Gemini API does NOT support response_mime_type when tools (function calling)
-            # are enabled. The error was: "Function calling with a response mime type:
-            # 'application/json' is unsupported"
+            # Disable response_mime_type when tools enabled: REMOVED response_mime_type:
+            # "application/json" because Gemini API does NOT support response_mime_type
+            # when tools (function calling) are enabled. The error was: "Function calling
+            # with a response mime type: 'application/json' is unsupported"
             # Reference: https://ai.google.dev/gemini-api/docs/function-calling
             # JSON output is enforced via system prompt instead.
             #
@@ -302,7 +323,7 @@ class LazyGeminiModel:
                 "safety_settings": safety_settings,  # FIX-424: Prevent response blocking
             }
 
-            # BUG-009 CORRECT FIX: Different thinking parameters per Gemini version
+            # Gemini 2.5 uses thinking_budget parameter (different from Gemini 3):
             # - Gemini 2.5: Uses "thinking_budget" (integer: 128-32768, or -1 for dynamic)
             # - Gemini 3: Uses "thinking_level" (string: "high", "medium", "low")
             # Reference: https://ai.google.dev/gemini-api/docs/thinking
@@ -349,9 +370,9 @@ def create_gemini_model(agent_type: str = "default") -> LazyGeminiModel:
     """
     Create lazy-loading GeminiModel wrapper for Strands Agent.
 
-    BUG-008 FIX: Returns LazyGeminiModel instead of GeminiModel to enable
-    fast A2A server startup. The actual Google API connection is deferred
-    until the first inference request.
+    Lazy initialization for AgentCore cold start optimization: Returns
+    LazyGeminiModel instead of GeminiModel to enable fast A2A server startup.
+    The actual Google API connection is deferred until the first inference request.
 
     TEMPORARY: Using Gemini 2.5 due to Strands SDK thoughtSignature issue.
     See: https://github.com/strands-agents/sdk-python/issues/1199
@@ -361,7 +382,7 @@ def create_gemini_model(agent_type: str = "default") -> LazyGeminiModel:
     1. Apply correct model ID based on agent type (Pro vs Flash)
     2. Configure thinking mode for complex reasoning agents
     3. Ensure consistent parameters across all agents
-    4. Enable lazy loading for fast AgentCore startup (BUG-008)
+    4. Enable lazy loading for fast AgentCore startup
 
     Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/model-providers/gemini/
 

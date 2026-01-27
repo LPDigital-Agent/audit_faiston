@@ -11,7 +11,7 @@ Architecture Note:
 Environment Variables:
     ENABLE_AUTO_SCHEMA_MAPPING: Enable automatic Phase 3 triggering (default: "true")
 
-BUG-033 FIX: Lazy Import Pattern
+Lazy import for AgentCore timeout compliance:
     MCPGatewayClientFactory is imported INSIDE get_mcp_file_analyzer() to:
     1. Avoid circular imports at module load time
     2. Allow sys.path modification before import
@@ -95,7 +95,7 @@ def get_mcp_file_analyzer():
     - MCP_GATEWAY_URL: AgentCore MCP Gateway endpoint
     - MCP_GATEWAY_API_KEY: API key for authentication (if required)
 
-    BUG-033 FIX: Uses lazy import pattern to:
+    Lazy import for AgentCore timeout compliance:
     1. Avoid circular imports at module load time
     2. Modify sys.path to include project root before importing
     3. Resolve namespace collision between agents/tools/ and root tools/

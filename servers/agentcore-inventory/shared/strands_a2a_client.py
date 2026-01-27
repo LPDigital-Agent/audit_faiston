@@ -5,14 +5,23 @@
 # compliant with CLAUDE.md IMMUTABLE rule (lines 31-36).
 #
 # Architecture:
-# - Uses Strands A2ACardResolver for agent discovery (/.well-known/agent-card.json)
-# - Uses Strands ClientFactory for A2A protocol compliance (JSON-RPC 2.0)
-# - Custom httpx transport with AWS SigV4 authentication for AgentCore Runtime
-# - Replaces custom boto3 implementation with Strands primitives
+# - Uses AWS GetAgentCard API for agent discovery (NOT HTTP /.well-known/agent-card.json)
+# - Uses boto3 invoke_agent_runtime for actual invocation (NOT httpx+SigV4)
+# - Implements JSON-RPC 2.0 A2A protocol manually for boto3 transport
 #
-# Key Difference from Legacy Client:
-# OLD: boto3.client('bedrock-agentcore').invoke_agent_runtime() - custom implementation
-# NEW: Strands A2ACardResolver + ClientFactory - framework-native approach
+# IMPORTANT (BUG-042 FIX v8):
+# AWS AgentCore does NOT expose /.well-known/agent-card.json via HTTP.
+# We must use the AWS GetAgentCard API with IAM auth instead of Strands A2ACardResolver.
+#
+# IMPORTANT (BUG-042 FIX v8 - httpx SigV4 bypass):
+# Custom httpx+SigV4 authentication fails inside AgentCore containers with 403 Forbidden.
+# boto3 invoke_agent_runtime works correctly. We now use boto3 for actual invocation
+# instead of Strands ClientFactory+httpx transport.
+#
+# Key Architecture:
+# - Discovery: boto3 GetAgentCard (works)
+# - Invocation: boto3 invoke_agent_runtime (works, replaces httpx+SigV4)
+# - Protocol: JSON-RPC 2.0 (manually constructed for boto3)
 #
 # Reference:
 # - https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
@@ -28,13 +37,14 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
 import httpx
+import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.session import Session as BotocoreSession
 
 # Strands Framework imports
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill, Message, Part, Role, TextPart
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -64,7 +74,7 @@ PROD_RUNTIME_IDS = {
     "file_analyzer": "faiston_sga_file_analyzer-tYGY6H9bHm",
     "vision_analyzer": "faiston_sga_vision_analyzer-Z1qoZUFHzs",
     "enrichment": "faiston_sga_enrichment-PLACEHOLDER",
-    # Smart Import Specialist Agents (BUG-023 FIX - Runtime IDs updated)
+    # Smart Import Specialist Agents - Runtime IDs for A2A communication
     "inventory_analyst": "faiston_inventory_analyst-0uGg1W8ITM",
     "schema_mapper": "faiston_schema_mapper-7fxI9bFHzd",
     "data_transformer": "faiston_data_transformer-xjSXPo8HaC",
@@ -207,11 +217,13 @@ class StrandsA2AClient:
         """
         Build AgentCore runtime URL from agent ID.
 
+        AWS AgentCore requires the URL-encoded ARN format, NOT the bare runtime ID.
+
         Args:
             agent_id: Agent identifier (e.g., "schema_mapper", "validation")
 
         Returns:
-            AgentCore invocation URL or None if agent not found
+            AgentCore invocation URL (with URL-encoded ARN) or None if agent not found
         """
         runtime_id = RUNTIME_IDS.get(agent_id)
         if not runtime_id:
@@ -225,19 +237,292 @@ class StrandsA2AClient:
             )
             return None
 
-        # Build AgentCore invocation URL (same format as legacy client)
-        # Format: https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{runtime_id}/invocations/
-        # Note: URL encoding not needed for Strands (handles internally)
-        url = f"https://bedrock-agentcore.{self.region}.amazonaws.com/runtimes/{runtime_id}/invocations/"
+        # Build full ARN
+        runtime_arn = (
+            f"arn:aws:bedrock-agentcore:{self.region}:{self.account_id}:runtime/{runtime_id}"
+        )
 
-        logger.debug(f"[Strands A2A] Built URL for {agent_id}: {url[:80]}...")
+        # URL-encode the ARN for the path segment
+        # AWS AgentCore requires this format: /runtimes/{url-encoded-arn}/invocations/
+        encoded_arn = urllib.parse.quote(runtime_arn, safe="")
+
+        url = f"https://bedrock-agentcore.{self.region}.amazonaws.com/runtimes/{encoded_arn}/invocations/"
+
+        logger.debug(f"[Strands A2A] Built URL for {agent_id}: {url[:100]}...")
         return url
+
+    def _fetch_agent_card_via_aws_api(self, agent_id: str, base_url: str) -> Optional[AgentCard]:
+        """
+        Fetch agent card via AWS AgentCore GetAgentCard API.
+
+        AWS AgentCore doesn't expose /.well-known/agent-card.json via HTTP.
+        Instead, we must use the GetAgentCard API operation with IAM auth.
+
+        Args:
+            agent_id: Agent identifier for lookup
+            base_url: Base invocation URL for the agent
+
+        Returns:
+            Strands AgentCard object or None if fetch failed
+        """
+        runtime_id = RUNTIME_IDS.get(agent_id)
+        if not runtime_id:
+            return None
+
+        runtime_arn = (
+            f"arn:aws:bedrock-agentcore:{self.region}:{self.account_id}:runtime/{runtime_id}"
+        )
+
+        try:
+            # Use boto3 to call GetAgentCard API
+            client = boto3.client(
+                "bedrock-agentcore",
+                region_name=self.region,
+            )
+
+            # Don't pass qualifier - let AWS use default behavior
+            # Explicitly passing qualifier="DEFAULT" causes issues with cold endpoints
+            response = client.get_agent_card(
+                agentRuntimeArn=runtime_arn,
+            )
+
+            if response.get("statusCode") != 200:
+                logger.error(
+                    f"[Strands A2A] GetAgentCard failed for {agent_id}: "
+                    f"status={response.get('statusCode')}"
+                )
+                return None
+
+            card_data = response.get("agentCard", {})
+
+            # Convert boto3 response to Strands AgentCard type
+            capabilities = AgentCapabilities(
+                streaming=card_data.get("capabilities", {}).get("streaming", False),
+            )
+
+            skills = [
+                AgentSkill(
+                    id=skill.get("id", "unknown"),
+                    name=skill.get("name", "Unknown"),
+                    description=skill.get("description", ""),
+                    tags=skill.get("tags", []),
+                )
+                for skill in card_data.get("skills", [])
+            ]
+
+            agent_card = AgentCard(
+                name=card_data.get("name", agent_id),
+                version=card_data.get("version", "1.0.0"),
+                description=card_data.get("description", ""),
+                url=base_url,  # Use our base URL, not the ARN-encoded one
+                capabilities=capabilities,
+                defaultInputModes=card_data.get("defaultInputModes", ["text"]),
+                defaultOutputModes=card_data.get("defaultOutputModes", ["text"]),
+                skills=skills,
+                preferredTransport=card_data.get("preferredTransport", "JSONRPC"),
+                protocolVersion=card_data.get("protocolVersion", "0.3.0"),
+            )
+
+            logger.info(
+                f"[Strands A2A] Fetched agent card via AWS API: {agent_card.name} "
+                f"(version: {agent_card.version})"
+            )
+            return agent_card
+
+        except Exception as e:
+            logger.error(
+                f"[Strands A2A] Failed to fetch agent card via AWS API for {agent_id}: {e}",
+                exc_info=True
+            )
+            return None
+
+    def _invoke_via_boto3(
+        self,
+        agent_id: str,
+        payload: Dict[str, Any],
+        message_id: str,
+        session_id: Optional[str] = None,
+    ) -> A2AResponse:
+        """
+        Invoke agent using boto3 invoke_agent_runtime (bypasses httpx SigV4 issues).
+
+        This method replaces the Strands ClientFactory+httpx transport because
+        custom httpx+SigV4 authentication fails inside AgentCore containers with 403.
+        boto3 invoke_agent_runtime uses the AWS SDK's native request signing which works.
+
+        Args:
+            agent_id: Agent identifier (e.g., "schema_mapper")
+            payload: Business payload to send
+            message_id: UUID for the A2A message
+            session_id: Optional session ID for context continuity
+
+        Returns:
+            A2AResponse with success status and response text
+        """
+        runtime_id = RUNTIME_IDS.get(agent_id)
+        if not runtime_id:
+            return A2AResponse(
+                success=False,
+                response="",
+                agent_id=agent_id,
+                message_id=message_id,
+                error=f"Unknown agent: {agent_id}",
+            )
+
+        if "PLACEHOLDER" in runtime_id:
+            return A2AResponse(
+                success=False,
+                response="",
+                agent_id=agent_id,
+                message_id=message_id,
+                error=f"Agent '{agent_id}' has PLACEHOLDER runtime ID",
+            )
+
+        runtime_arn = (
+            f"arn:aws:bedrock-agentcore:{self.region}:{self.account_id}:runtime/{runtime_id}"
+        )
+
+        # Build JSON-RPC 2.0 message (A2A protocol)
+        rpc_message = {
+            "jsonrpc": "2.0",
+            "id": message_id,
+            "method": "message/send",
+            "params": {
+                "message": {
+                    "kind": "message",
+                    "role": "user",
+                    "parts": [{"kind": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+                    "messageId": message_id,
+                }
+            },
+        }
+
+        # Add session ID if provided (for context continuity)
+        if session_id:
+            rpc_message["params"]["sessionId"] = session_id
+
+        try:
+            logger.info(
+                f"[Strands A2A] Invoking {agent_id} via boto3 "
+                f"(message_id: {message_id[:8]}...)"
+            )
+
+            client = boto3.client("bedrock-agentcore", region_name=self.region)
+            response = client.invoke_agent_runtime(
+                agentRuntimeArn=runtime_arn,
+                payload=json.dumps(rpc_message),  # FIXED: was 'body', must be 'payload'
+                contentType="application/json",
+            )
+
+            # Check HTTP status
+            status_code = response.get("statusCode", 0)
+            if status_code != 200:
+                return A2AResponse(
+                    success=False,
+                    response="",
+                    agent_id=agent_id,
+                    message_id=message_id,
+                    error=f"boto3 invoke failed with status {status_code}",
+                )
+
+            # Read streaming body
+            streaming_body = response.get("response")
+            if not streaming_body:
+                return A2AResponse(
+                    success=False,
+                    response="",
+                    agent_id=agent_id,
+                    message_id=message_id,
+                    error="No response body from agent",
+                )
+
+            response_bytes = streaming_body.read()
+            response_str = response_bytes.decode("utf-8")
+
+            logger.debug(f"[Strands A2A] Raw boto3 response: {response_str[:500]}...")
+
+            # Parse JSON-RPC 2.0 response
+            try:
+                response_json = json.loads(response_str)
+            except json.JSONDecodeError as e:
+                # Agent returned raw text, not JSON-RPC envelope
+                logger.warning(f"[Strands A2A] Agent returned non-JSON response: {response_str[:200]}")
+                return A2AResponse(
+                    success=True,  # Call succeeded, just non-standard format
+                    response=response_str,
+                    agent_id=agent_id,
+                    message_id=message_id,
+                    raw_response={"raw_text": response_str},
+                )
+
+            # Check for JSON-RPC error
+            if "error" in response_json:
+                error_obj = response_json["error"]
+                error_msg = error_obj.get("message", str(error_obj))
+                return A2AResponse(
+                    success=False,
+                    response="",
+                    agent_id=agent_id,
+                    message_id=message_id,
+                    error=f"A2A error: {error_msg}",
+                    raw_response=response_json,
+                )
+
+            # Extract response text from JSON-RPC result
+            result = response_json.get("result", {})
+            message_obj = result.get("message", {})
+            parts = message_obj.get("parts", [])
+
+            response_text = ""
+            for part in parts:
+                part_kind = part.get("kind", "")
+                if part_kind == "text":
+                    response_text += part.get("text", "")
+                elif part_kind == "data":
+                    # Structured data response
+                    data = part.get("data", {})
+                    response_text = json.dumps(data, ensure_ascii=False)
+                    break  # Data takes precedence
+
+            # Fallback: check for direct text in result
+            if not response_text and isinstance(result, str):
+                response_text = result
+            elif not response_text and "text" in result:
+                response_text = result["text"]
+
+            logger.info(
+                f"[Strands A2A] boto3 invoke success for {agent_id}: "
+                f"{response_text[:200]}..."
+            )
+
+            return A2AResponse(
+                success=True,
+                response=response_text,
+                agent_id=agent_id,
+                message_id=message_id,
+                raw_response=response_json,
+            )
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(
+                f"[Strands A2A] boto3 invoke failed for {agent_id}: {error_msg}",
+                exc_info=True
+            )
+            return A2AResponse(
+                success=False,
+                response="",
+                agent_id=agent_id,
+                message_id=message_id,
+                error=error_msg,
+            )
 
     async def _get_or_create_client(self, agent_id: str, session_timeout: float) -> Optional[Any]:
         """
         Get or create Strands A2A client for an agent.
 
-        Uses A2ACardResolver for agent discovery and ClientFactory for protocol compliance.
+        Uses AWS GetAgentCard API for discovery (not HTTP /.well-known/agent-card.json)
+        and ClientFactory for protocol compliance.
 
         Args:
             agent_id: Agent identifier
@@ -266,10 +551,14 @@ class StrandsA2AClient:
                 timeout=httpx.Timeout(session_timeout),
             )
 
-            # Discover agent capabilities via Agent Card
-            logger.info(f"[Strands A2A] Discovering agent card for {agent_id} at {base_url}")
-            resolver = A2ACardResolver(httpx_client=httpx_client, base_url=base_url)
-            agent_card = await resolver.get_agent_card()
+            # FIX: Use AWS GetAgentCard API instead of HTTP-based discovery
+            # AWS AgentCore doesn't serve /.well-known/agent-card.json via HTTP
+            logger.info(f"[Strands A2A] Fetching agent card for {agent_id} via AWS API")
+            agent_card = self._fetch_agent_card_via_aws_api(agent_id, base_url)
+
+            if not agent_card:
+                logger.error(f"[Strands A2A] Could not fetch agent card for {agent_id}")
+                return None
 
             logger.info(
                 f"[Strands A2A] Discovered agent: {agent_card.name} "
@@ -350,116 +639,37 @@ class StrandsA2AClient:
         message_id = str(uuid.uuid4())
 
         try:
-            # Get or create Strands A2A client for this agent
-            a2a_client = await self._get_or_create_client(agent_id, timeout)
-            if not a2a_client:
-                return A2AResponse(
-                    success=False,
-                    response="",
-                    agent_id=agent_id,
-                    message_id=message_id,
-                    error=f"Agent '{agent_id}' not found or discovery failed",
-                )
-
-            # Build A2A message using Strands types
-            # Convert payload dict to JSON text for TextPart
-            payload_text = json.dumps(payload, ensure_ascii=False)
-
-            message = Message(
-                kind="message",
-                role=Role.user,
-                parts=[Part(TextPart(kind="text", text=payload_text))],
-                message_id=message_id,
-            )
-
-            logger.info(f"[Strands A2A] Sending message to {agent_id} (session: {session_id})")
-
-            # Send message via Strands client
-            response_message = None
-            async for event in a2a_client.send_message(message):
-                if isinstance(event, Message):
-                    response_message = event
-                    break  # First message is the response (non-streaming)
-
-            if not response_message:
-                return A2AResponse(
-                    success=False,
-                    response="",
-                    agent_id=agent_id,
-                    message_id=message_id,
-                    error="No response received from agent",
-                )
-
-            # Diagnostic logging for A2A response structure (BUG-027)
-            if response_message:
-                logger.debug(
-                    f"[Strands A2A] Response parts count: {len(response_message.parts)}, "
-                    f"types: {[type(p).__name__ for p in response_message.parts]}"
-                )
-
-            # Extract text from response message parts
-            # BUG-027 FIX: Handle multiple part types for structured_output_model compatibility
-            response_text = ""
-            for part in response_message.parts:
-                try:
-                    # Handle TextPart content (standard text response)
-                    if hasattr(part, "content") and isinstance(part.content, TextPart):
-                        response_text += part.content.text
-                    # Handle direct text attribute (some serialization formats)
-                    elif hasattr(part, "text") and isinstance(part.text, str):
-                        response_text += part.text
-                    # Handle Part with content dict (structured output)
-                    elif hasattr(part, "content") and isinstance(part.content, dict):
-                        response_text = json.dumps(part.content)
-                        break  # Structured content takes precedence
-                    # Handle Part with content string
-                    elif hasattr(part, "content") and isinstance(part.content, str):
-                        response_text += part.content
-                    # Handle Pydantic-style root attribute
-                    elif hasattr(part, "root") and part.root is not None:
-                        if isinstance(part.root, dict):
-                            response_text = json.dumps(part.root)
-                        elif hasattr(part.root, "model_dump"):
-                            response_text = json.dumps(part.root.model_dump())
-                        break
-                except (TypeError, ValueError, AttributeError) as e:
-                    logger.warning(
-                        f"[Strands A2A] Failed to extract from part {type(part).__name__}: {e}"
-                    )
-                    continue  # Try next part
-
-            # FALLBACK: Extract from raw_response if still empty (BUG-027)
-            if not response_text and response_message.parts:
-                logger.warning(
-                    f"[Strands A2A] No text extracted from parts. "
-                    f"Part types: {[type(p).__name__ for p in response_message.parts]}. "
-                    f"Attempting fallback extraction..."
-                )
-                # Try to extract from the Message object directly
-                for part in response_message.parts:
-                    try:
-                        # Last resort: serialize the entire part
-                        if hasattr(part, "__dict__"):
-                            response_text = json.dumps(part.__dict__, default=str)
-                            logger.info("[Strands A2A] Extracted via __dict__ fallback")
-                            break
-                    except Exception as e:
-                        logger.warning(f"[Strands A2A] Fallback extraction failed: {e}")
-
+            # FIX v8: Use boto3 invoke_agent_runtime instead of httpx+SigV4
+            # httpx+SigV4 fails with 403 inside AgentCore containers, but boto3 works
             logger.info(
-                f"[Strands A2A] Received response from {agent_id}: "
-                f"{response_text[:200]}..."
+                f"[Strands A2A] Invoking {agent_id} via boto3 (session: {session_id})"
             )
 
-            # Return success response
-            return A2AResponse(
-                success=True,
-                response=response_text,
+            result = self._invoke_via_boto3(
                 agent_id=agent_id,
+                payload=payload,
                 message_id=message_id,
-                error=None,
-                raw_response={"message": response_message},
+                session_id=session_id,
             )
+
+            # Emit success/error audit events
+            if audit:
+                try:
+                    if result.success:
+                        audit.success(
+                            message=f"A2A call to {agent_id} succeeded (boto3)",
+                            session_id=session_id,
+                        )
+                    else:
+                        audit.error(
+                            message=f"A2A call to {agent_id} failed: {result.error}",
+                            session_id=session_id,
+                            error=result.error[:500] if result.error else "Unknown error",
+                        )
+                except Exception:
+                    pass  # Ignore audit errors
+
+            return result
 
         except Exception as e:
             error_msg = str(e)
@@ -472,7 +682,7 @@ class StrandsA2AClient:
             if audit:
                 try:
                     audit.error(
-                        message=f"Erro ao chamar {agent_id} (Strands Framework)",
+                        message=f"Erro ao chamar {agent_id} (boto3)",
                         session_id=session_id,
                         error=error_msg[:500],
                     )

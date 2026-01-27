@@ -19,7 +19,7 @@
 # VERSION: 2026-01-21T18:00:00Z
 # =============================================================================
 
-# BUG-035: Migrated from BedrockAgentCoreApp to A2AServer
+# Migrated from BedrockAgentCoreApp to A2AServer
 # - Removed: 'app' (BedrockAgentCoreApp - no longer used)
 # - Added: 'create_app' (FastAPI factory for A2AServer)
 # - Changed: AGENT_ID, AGENT_NAME now come from config submodule (lazy import)

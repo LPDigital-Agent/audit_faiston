@@ -122,11 +122,11 @@ class KeepAliveManager:
                 logger.info(f"[KeepAlive:{self.agent_id}] Cancelled")
                 break
             except (ConnectionError, OSError, TimeoutError) as e:
-                # BUG-022 v9 FIX (MEDIUM-H2): Categorize exceptions
-                # Transient network errors - expected, continue trying
+                # Exception categorization for heartbeat: Transient network errors
+                # These are expected and the heartbeat will continue trying
                 logger.debug(f"[KeepAlive:{self.agent_id}] Transient error (will retry): {e}")
             except Exception as e:
-                # BUG-022 v9 FIX (MEDIUM-H2): Unexpected errors - log at WARNING level
+                # Exception categorization for heartbeat: Unexpected errors
                 # These could be bugs in the heartbeat logic or unexpected states
                 logger.warning(
                     f"[KeepAlive:{self.agent_id}] Unexpected heartbeat error "
@@ -149,7 +149,7 @@ class KeepAliveManager:
             )
             return
 
-        # BUG-022 v9 FIX (MEDIUM-H1): Better handling of task states
+        # Exception categorization for heartbeat: Better handling of task states
         if self._task is not None:
             if not self._task.done():
                 if force_restart:

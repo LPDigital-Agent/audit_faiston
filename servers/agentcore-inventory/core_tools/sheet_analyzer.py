@@ -1846,7 +1846,7 @@ def _analyze_image_with_vision(
     """
     Analyze image containing tabular data using VisionAnalyzer A2A Agent.
 
-    BUG-025 FIX: Now uses VisionAnalyzer A2A Agent instead of
+    VisionAnalyzer A2A integration: Now uses VisionAnalyzer A2A Agent instead of
     direct google.genai SDK calls (which violated CLAUDE.md).
 
     This is the AI-First approach - all visual data extraction is done
@@ -1861,7 +1861,7 @@ def _analyze_image_with_vision(
     Returns:
         WorkbookAnalysis with extracted table data
     """
-    # BUG-025 FIX: Use VisionAnalyzer via A2A protocol
+    # VisionAnalyzer A2A integration: Use VisionAnalyzer via A2A protocol
     # Note: This sync wrapper creates a placeholder - callers should
     # use the async A2A client directly for full functionality
     logger.info("[sheet_analyzer] Image analysis placeholder - use VisionAnalyzer A2A")
@@ -1874,7 +1874,7 @@ def _analyze_image_with_vision(
         total_sheets=0,
         total_rows=0,
         extraction_source="vision_analyzer_placeholder",
-        warnings=["BUG-025: Vision analysis migrated to VisionAnalyzer A2A Agent"],
+        warnings=["Vision analysis migrated to VisionAnalyzer A2A Agent"],
     )
 
 
@@ -1885,7 +1885,7 @@ def _analyze_pdf_with_vision(
     """
     Analyze PDF document using VisionAnalyzer A2A Agent.
 
-    BUG-025 FIX: Now uses VisionAnalyzer A2A Agent instead of
+    VisionAnalyzer A2A integration: Now uses VisionAnalyzer A2A Agent instead of
     direct google.genai SDK calls (which violated CLAUDE.md).
 
     This is the AI-First approach - PDF is processed by the
@@ -1898,7 +1898,7 @@ def _analyze_pdf_with_vision(
     Returns:
         WorkbookAnalysis with extracted table data
     """
-    # BUG-025 FIX: Use VisionAnalyzer via A2A protocol
+    # VisionAnalyzer A2A integration: Use VisionAnalyzer via A2A protocol
     # Note: This sync wrapper creates a placeholder - callers should
     # use the async A2A client directly for full functionality
     logger.info("[sheet_analyzer] PDF analysis placeholder - use VisionAnalyzer A2A")
@@ -1911,7 +1911,7 @@ def _analyze_pdf_with_vision(
         total_sheets=0,
         total_rows=0,
         extraction_source="vision_analyzer_placeholder",
-        warnings=["BUG-025: Vision analysis migrated to VisionAnalyzer A2A Agent"],
+        warnings=["Vision analysis migrated to VisionAnalyzer A2A Agent"],
     )
 
 

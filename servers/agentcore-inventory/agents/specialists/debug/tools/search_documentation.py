@@ -1,5 +1,5 @@
 # =============================================================================
-# DebugAgent Tool: search_documentation (BUG-032 Enhanced)
+# DebugAgent Tool: search_documentation - Enhanced Documentation Search
 # =============================================================================
 # Enhanced documentation search with expanded error pattern mappings.
 #
@@ -11,8 +11,8 @@
 # - Python standard library docs
 # - Common error patterns from Stack Overflow / GitHub
 #
-# BUG-032 FIX: Expanded from ~15 URLs to 80+ curated links covering common
-# error patterns in agentic systems, AWS services, and Python.
+# 80+ curated links covering common error patterns in agentic systems,
+# AWS services, and Python.
 #
 # Architecture:
 # - Curated static mappings for reliability (no external API failures)
@@ -27,7 +27,7 @@ from typing import Dict, Any, Optional, List
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# Comprehensive Documentation Mappings (BUG-032 Enhanced)
+# Comprehensive Documentation Mappings
 # =============================================================================
 # Organized by error category for precise matching
 
@@ -351,7 +351,7 @@ DOC_MAPPINGS = {
 }
 
 # =============================================================================
-# Enhanced Keyword Extraction (BUG-032)
+# Enhanced Keyword Extraction
 # =============================================================================
 
 # Comprehensive keyword map for error pattern matching
@@ -429,14 +429,14 @@ KEYWORD_TO_SOURCE = {
 async def search_documentation_tool(
     query: str,
     sources: Optional[List[str]] = None,
-    max_results: int = 10,  # BUG-032: Increased from 5
+    max_results: int = 10,  # Increased default for better coverage
     session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Search relevant documentation for error debugging.
 
-    BUG-032 Enhanced: Now provides 80+ curated documentation links
-    covering common error patterns in agentic systems.
+    Provides 80+ curated documentation links covering common error
+    patterns in agentic systems.
 
     Args:
         query: Search query text (error message, type, or keywords)
@@ -450,7 +450,7 @@ async def search_documentation_tool(
     Raises:
         None: This function performs static lookups only and does not raise exceptions.
     """
-    logger.info(f"[search_documentation] BUG-032: Enhanced query: {query[:80]}...")
+    logger.info(f"[search_documentation] Enhanced query: {query[:80]}...")
 
     # Default to all sources
     if sources is None:
@@ -520,8 +520,7 @@ def _extract_keywords(query: str) -> List[str]:
     """
     Extract keywords from search query.
 
-    BUG-032 Enhanced: Uses comprehensive keyword mapping
-    with multiple variations per keyword.
+    Uses comprehensive keyword mapping with multiple variations per keyword.
 
     Args:
         query: Search query string (lowercase)

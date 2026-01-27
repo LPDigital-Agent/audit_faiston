@@ -9,8 +9,8 @@
 # - search_documentation: MCP-based documentation search
 # - query_memory_patterns: Historical error pattern lookup
 # - store_resolution: Store successful resolutions
-# - search_stackoverflow: Real-time Stack Exchange API search (BUG-034)
-# - search_github_issues: Real-time GitHub Issues search (BUG-034)
+# - search_stackoverflow: Real-time Stack Exchange API search
+# - search_github_issues: Real-time GitHub Issues search
 # =============================================================================
 
 # DebugAgent v2: Code Inspector Tool (USE FIRST for stack traces)
@@ -32,7 +32,7 @@ __all__ = [
     "search_documentation_tool",
     "query_memory_patterns_tool",
     "store_resolution_tool",
-    # External search (BUG-034)
+    # External search
     "search_stackoverflow_tool",
     "search_github_issues_tool",
 ]

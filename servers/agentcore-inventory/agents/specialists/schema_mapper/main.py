@@ -34,19 +34,19 @@
 # - AWS Bedrock AgentCore with A2A protocol on port 9000
 # - Uses uvicorn + A2AServer (NOT BedrockAgentCoreApp)
 #
-# BUG-034 FIX: Lazy imports pattern for AgentCore 30s initialization timeout
+# Lazy imports for AgentCore 30s timeout compliance:
 # - Only import what's needed at module level (json, logging, os)
 # - All heavy imports (strands, hooks, validators, etc.) deferred to first request
 #
-# BUG-035 FIX: A2A Protocol Migration
+# A2A Protocol Migration:
 # - Changed from BedrockAgentCoreApp (HTTP, port 8080) to A2AServer (A2A, port 9000)
 # - AgentCore expects A2A servers on port 9000 at root path (/)
 #
-# VERSION: 2026-01-27T15:30:00Z (BUG-039 force redeploy - container 403 fix)
+# VERSION: 2026-01-27T15:30:00Z (container 403 fix - force redeploy)
 # =============================================================================
 
 # =============================================================================
-# BUG-033 FIX: sys.path fix for AgentCore Runtime
+# sys.path fix for AgentCore Runtime
 # =============================================================================
 # MUST be at the very top, BEFORE any shared.* or tools.* imports.
 # AgentCore deploys to /var/task but nested package imports can fail.
@@ -64,7 +64,7 @@ if _project_root not in sys.path:
 # =============================================================================
 
 # =============================================================================
-# MINIMAL MODULE-LEVEL IMPORTS (BUG-034 + BUG-035)
+# MINIMAL MODULE-LEVEL IMPORTS (Lazy loading pattern)
 # =============================================================================
 # Only import what's absolutely required for fast initialization:
 # 1. Logging (lightweight, standard library)
@@ -84,7 +84,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# LAZY IMPORT CACHE (BUG-034)
+# LAZY IMPORT CACHE (AgentCore timeout compliance)
 # =============================================================================
 # Heavy imports are loaded ONCE on first invoke() and cached globally.
 # This reduces module initialization time from >30s to <1s.
@@ -113,7 +113,8 @@ def _ensure_lazy_imports() -> None:
     """
     Load all heavy imports on first invoke() call.
 
-    BUG-034 FIX: AgentCore Firecracker has a 30-second initialization timeout.
+    Lazy imports for AgentCore 30s timeout compliance:
+    AgentCore Firecracker has a 30-second initialization timeout.
     By deferring heavy imports to first invoke(), we:
     1. Allow app.run() to start the listener quickly (<1s)
     2. Load heavy dependencies only when actually needed
@@ -357,7 +358,7 @@ When you cannot confidently map a REQUIRED column:
 3. The orchestrator will ask the user and save the answer as a Training Example
 4. On subsequent imports, you'll find this pattern in memory via observe_prior_patterns
 
-## Intelligent Question Generation (BUG-045 FIX)
+## Intelligent Question Generation
 When generating questions for disambiguation, use the sample_data provided to create
 CONTEXT-AWARE questions. DO NOT use generic templates.
 
@@ -452,9 +453,10 @@ def _create_tools():
     """
     Create tool functions with @tool decorator after lazy imports are loaded.
 
-    BUG-034 FIX: We can't use @tool decorator at module level because
-    strands isn't imported until _ensure_lazy_imports() runs. Instead,
-    we create the tools dynamically here.
+    Lazy imports for AgentCore 30s timeout compliance:
+    We can't use @tool decorator at module level because strands isn't
+    imported until _ensure_lazy_imports() runs. Instead, we create the
+    tools dynamically here.
 
     Returns:
         List of tool-decorated functions for the Strands Agent.
@@ -694,7 +696,8 @@ def _create_agent_skills() -> list:
     """
     Create agent skills after lazy imports are loaded.
 
-    BUG-034 FIX: AgentSkill class requires a2a.types import which is deferred.
+    Lazy imports for AgentCore 30s timeout compliance:
+    AgentSkill class requires a2a.types import which is deferred.
     """
     _ensure_lazy_imports()
     return [
@@ -741,7 +744,7 @@ def create_agent():
     - Memory persistence (AgentCore Memory)
     - Gemini 2.5 Pro + Thinking (per CLAUDE.md)
 
-    BUG-034 FIX: Uses lazy-loaded classes and decorators.
+    Uses lazy-loaded classes and decorators for AgentCore timeout compliance.
 
     Returns:
         Strands Agent configured for semantic column mapping.
@@ -772,7 +775,7 @@ def create_agent():
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         hooks=hooks,
-        # BUG-023 FIX: Enforce structured JSON output matching Pydantic model
+        # Enforce structured JSON output matching Pydantic model
         structured_output_model=_SchemaMappingResponse,
     )
 
@@ -789,8 +792,8 @@ def create_a2a_server(agent):
     - Agent Card discovery at /.well-known/agent.json
     - Health check at /health
 
-    BUG-034 FIX: Uses lazy-loaded A2AServer class.
-    BUG-035 FIX: Uses port 9000 and serve_at_root=True for AgentCore.
+    Uses lazy-loaded A2AServer class for AgentCore timeout compliance.
+    Uses port 9000 and serve_at_root=True for AgentCore A2A protocol.
 
     Args:
         agent: The Strands Agent to wrap.
@@ -807,11 +810,11 @@ def create_a2a_server(agent):
     server = _A2AServer(
         agent=agent,
         host="0.0.0.0",
-        port=9000,  # BUG-035: AgentCore expects port 9000
+        port=9000,  # AgentCore expects port 9000 for A2A protocol
         http_url=runtime_url,
         version=_AGENT_VERSION,
         skills=skills,
-        serve_at_root=True,  # BUG-035: Required for AgentCore
+        serve_at_root=True,  # Required for AgentCore A2A protocol
     )
 
     logger.info(
@@ -824,7 +827,7 @@ def create_a2a_server(agent):
 # =============================================================================
 # Legacy Invoke Handler (Backward Compatibility)
 # =============================================================================
-# NOTE: With BUG-035 A2A migration, this function is NO LONGER the entrypoint.
+# NOTE: With A2A migration, this function is NO LONGER the entrypoint.
 # The A2AServer routes JSON-RPC messages directly to the Strands Agent.
 # This function is kept for backward compatibility with tests and direct calls.
 # =============================================================================
@@ -834,7 +837,7 @@ def invoke(payload: dict, context=None) -> dict:
     """
     Legacy handler for direct invocation (backward compatibility).
 
-    NOTE: With BUG-035 A2A migration, this function is NO LONGER the entrypoint.
+    NOTE: With A2A migration, this function is NO LONGER the entrypoint.
     The A2AServer routes JSON-RPC messages directly to the Strands Agent.
     This function is kept for:
     - Backward compatibility with tests
@@ -863,7 +866,7 @@ def invoke(payload: dict, context=None) -> dict:
         session_id = payload.get("session_id", "unknown")
         logger.info(f"[SchemaMapper] Invoked with keys: {list(payload.keys())}, session={session_id}")
 
-        # BUG-034: Lazy imports are loaded here on first LLM call
+        # Lazy imports are loaded here on first LLM call
         _ensure_lazy_imports()
 
         # Initialize Strands Agent (uses lazy-loaded classes)
@@ -889,7 +892,7 @@ def invoke(payload: dict, context=None) -> dict:
 
 
 # =============================================================================
-# A2A SERVER FACTORY (BUG-035 FIX)
+# A2A SERVER FACTORY
 # =============================================================================
 # Creates FastAPI app with A2AServer mounted for AgentCore A2A protocol.
 # Port 9000, serve_at_root=True per AgentCore A2A requirements.
@@ -900,8 +903,8 @@ def create_app():
     """
     Factory function to create FastAPI app with A2AServer.
 
-    BUG-035 FIX: Migrates from BedrockAgentCoreApp (HTTP, port 8080) to
-    A2AServer (A2A protocol, port 9000).
+    A2A Protocol Migration: Migrates from BedrockAgentCoreApp (HTTP, port 8080)
+    to A2AServer (A2A protocol, port 9000).
 
     This function:
     1. Loads lazy imports (first call triggers heavy imports)
@@ -949,7 +952,7 @@ def _start_server():
     """
     Start the A2A server with uvicorn.
 
-    BUG-035 FIX: Uses uvicorn on port 9000 for A2A protocol.
+    Uses uvicorn on port 9000 for A2A protocol compliance.
 
     This function is called:
     - When module is run directly: `python -m agents.specialists.schema_mapper.main`
@@ -968,14 +971,14 @@ def _start_server():
 
 
 # =============================================================================
-# MODULE-LEVEL EXECUTION (BUG-035 FIX)
+# MODULE-LEVEL EXECUTION
 # =============================================================================
 # A2A servers must start uvicorn on port 9000. The server is started when:
 # 1. Module is run directly: __name__ == "__main__"
 # 2. Module is imported in AgentCore: AWS_EXECUTION_ENV is set
 #
-# CRITICAL (User Feedback A): We use AWS_EXECUTION_ENV check instead of bare
-# `else` block to avoid side-effects on import. This allows:
+# We use AWS_EXECUTION_ENV check instead of bare `else` block to avoid
+# side-effects on import. This allows:
 # - Unit tests to import without blocking
 # - Local development with explicit `python main.py`
 # - AgentCore deployment to auto-start server
@@ -984,7 +987,7 @@ def _start_server():
 if __name__ == "__main__":
     # Local development: python -m agents.specialists.schema_mapper.main
     _start_server()
-# REMOVED (BUG-036): AWS_EXECUTION_ENV check was redundant.
+# REMOVED: AWS_EXECUTION_ENV check was redundant.
 # AgentCore A2A pattern uses `if __name__ == "__main__"` only.
 # Ref: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
 
@@ -999,7 +1002,7 @@ __all__ = [
     "AGENT_PORT",
     "create_agent",
     "create_a2a_server",
-    "create_app",  # BUG-035: FastAPI factory for A2AServer
-    "_start_server",  # BUG-035: Server startup function
+    "create_app",  # FastAPI factory for A2AServer
+    "_start_server",  # Server startup function
     "invoke",  # Legacy handler for backward compatibility
 ]

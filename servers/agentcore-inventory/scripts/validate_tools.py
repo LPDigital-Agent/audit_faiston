@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BUG-025: Automated Tool Compliance Validator
+Tool Compliance Validator
 
 Validates that ALL @tool decorated functions follow Strands patterns:
 1. Have proper docstrings with Args section

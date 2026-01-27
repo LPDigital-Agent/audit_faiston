@@ -191,7 +191,7 @@ Output:
 {
   "success": true,
   "fix_applied": true,
-  "branch_name": "fix/BUG-044-missing-part-number-validation",
+  "branch_name": "fix/issue-123-missing-part-number-validation",
   "commit_sha": "a1b2c3d",
   "pr_url": "https://github.com/org/repo/pull/123",
   "syntax_valid": true,

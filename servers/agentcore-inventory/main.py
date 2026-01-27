@@ -1,7 +1,7 @@
 # =============================================================================
 # Faiston Inventory Management - AgentCore Entry Point
 # =============================================================================
-# BUG-036 FIX: Updated to use create_app() factory pattern.
+# Application factory pattern - uses create_app() for AgentCore compatibility.
 # Based on OFFICIAL AgentCore A2A documentation pattern.
 # Ref: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
 #

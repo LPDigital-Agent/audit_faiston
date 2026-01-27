@@ -10,7 +10,7 @@ Port: 9000 (AgentCore A2A requirement)
 Memory: STM + LTM via AgentMemoryManager
 Model: Gemini 2.5 Pro + Thinking (critical inventory agent per CLAUDE.md)
 
-BUG-035: Migrated to A2AServer pattern (port 9000, serve_at_root=True)
+Migrated to A2AServer pattern (port 9000, serve_at_root=True)
 
 Author: Faiston NEXO Team
 Date: January 2026

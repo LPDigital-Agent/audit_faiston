@@ -57,6 +57,10 @@ def analyze_file_structure(s3_key: str) -> str:
             "error": "Error description",
             "error_type": "ERROR_TYPE"
         }
+
+        IMPORTANT (BUG-042): When this tool returns success, the agent MUST
+        IMMEDIATELY call `map_to_schema` with the extracted columns and sample_data.
+        Do NOT ask for user confirmation before mapping - the HIL gate is at STEP 5.
     """
     try:
         if not s3_key:

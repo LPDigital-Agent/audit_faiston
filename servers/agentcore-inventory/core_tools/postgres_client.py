@@ -59,7 +59,7 @@ class SGAPostgresClient:
 
         # Configuration from environment
         self._proxy_endpoint = os.environ.get("RDS_PROXY_ENDPOINT")
-        # BUG-022 v9 FIX (HIGH-T2): Remove hardcoded ARN - security vulnerability!
+        # Security fix (HIGH-T2): Remove hardcoded ARN - security vulnerability!
         # Hardcoded secrets in source code can be leaked via version control.
         # The ARN MUST come from environment variable (set by Terraform/Lambda config).
         self._secret_arn = os.environ.get("RDS_SECRET_ARN")

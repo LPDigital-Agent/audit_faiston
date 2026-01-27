@@ -1,5 +1,5 @@
 # =============================================================================
-# DebugAgent Tool: analyze_error - BUG-027 FIX: AI-Powered Analysis
+# DebugAgent Tool: analyze_error - AI-Powered Error Analysis
 # =============================================================================
 # Deep error analysis with Gemini 2.5 Pro reasoning.
 #
@@ -81,7 +81,7 @@ def generate_error_signature(
         Hash-based error signature
     """
     # Normalize message by removing variable content
-    # BUG-039: Defensive coding - handle non-string messages
+    # Defensive coding - handle non-string messages
     normalized_msg = str(message).lower() if message else ""
     # Remove UUIDs
     normalized_msg = re.sub(
@@ -129,7 +129,7 @@ def classify_error(error_type: str) -> Dict[str, Any]:
 
 
 # =============================================================================
-# Main Tool Function - BUG-027 FIX: AI-Powered Analysis
+# Main Tool Function - AI-Powered Error Analysis
 # =============================================================================
 
 
@@ -145,9 +145,9 @@ async def analyze_error_tool(
     """
     Analyze error with Gemini 2.5 Pro reasoning.
 
-    BUG-027 FIX: Implements CLAUDE.md "Sandwich Pattern" (CODE → LLM → CODE).
-    Previous implementation was 100% rule-based with keyword matching,
-    violating the "LLM = Brain / Python = Hands" principle.
+    AI-powered error analysis implementing CLAUDE.md "Sandwich Pattern"
+    (CODE → LLM → CODE). Uses LLM for deep reasoning while Python handles
+    deterministic tasks like signature generation and memory queries.
 
     Architecture:
     - CODE (Python = Hands): Signature generation, memory query, doc search
@@ -170,7 +170,7 @@ async def analyze_error_tool(
         MemoryError: If AgentCore Memory query fails (caught internally).
         Exception: If Gemini API call fails (caught internally, returns fallback analysis).
     """
-    logger.info(f"[analyze_error] BUG-027: AI-Powered analysis: {error_type} in {operation}")
+    logger.info(f"[analyze_error] AI-Powered analysis: {error_type} in {operation}")
 
     # =========================================================================
     # STEP 1: CODE (Python = Hands) - Prepare inputs
@@ -387,7 +387,7 @@ IMPORTANT RULES:
         "suggested_action": analysis.get("suggested_action", "escalate"),
         "analysis_timestamp": datetime.utcnow().isoformat() + "Z",
         "classification": classification,
-        "llm_powered": True,  # BUG-027: Flag to indicate AI analysis was used
+        "llm_powered": True,  # Flag to indicate AI analysis was used
     }
 
 

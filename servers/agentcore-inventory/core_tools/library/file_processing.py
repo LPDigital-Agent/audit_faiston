@@ -31,7 +31,7 @@ import boto3
 from botocore.config import Config
 
 # NOTE: pandas is lazy-loaded inside methods to reduce cold start time
-# Do NOT add `import pandas as pd` at module level - see BUG-039
+# Do NOT add `import pandas as pd` at module level - avoid pandas import at module level for cold start optimization
 from botocore.exceptions import ClientError
 
 
@@ -252,7 +252,7 @@ class FileInspector:
                 error_type="VALIDATION_ERROR",
             )
 
-        # BUG-040 FIX: Normalize S3 key to NFC Unicode form for consistent lookup
+        # Unicode NFC normalization for S3 keys: Normalize key to NFC form for consistent lookup
         # Prevents NoSuchKey errors when NFD (decomposed) vs NFC (composed) mismatch
         # Example: "Ç" can be U+00C7 (NFC) or "C"+U+0327 (NFD) - S3 treats as different keys
         import unicodedata
@@ -576,7 +576,7 @@ class FileInspector:
                 error_type="DOWNLOAD_ERROR",
             )
 
-        # Lazy import pandas to reduce cold start time (BUG-039)
+        # Lazy import pandas to reduce cold start time (cold start optimization)
         import pandas as pd
 
         # Try UTF-8 first, then Latin-1
@@ -695,7 +695,7 @@ class FileInspector:
                 error_type="DOWNLOAD_ERROR",
             )
 
-        # Lazy import pandas to reduce cold start time (BUG-039)
+        # Lazy import pandas to reduce cold start time (cold start optimization)
         import pandas as pd
 
         # Parse Excel

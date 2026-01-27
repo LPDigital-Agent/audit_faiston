@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# BUG-022 v9 FIX (CRITICAL-T2): Input validation for schema evolution
+# Input validation for schema evolution
 # =============================================================================
 # Security: Prevent SQL injection and unauthorized table/column creation
 
@@ -368,7 +368,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         - Double-checks column existence after acquiring lock
         - Returns success if column already exists (race condition handled)
 
-        Security (BUG-022 v9 CRITICAL-T2):
+        Security (Input validation for schema evolution):
         - table_name MUST be in ALLOWED_TABLES_FOR_SCHEMA_EVOLUTION whitelist
         - column_name MUST match COLUMN_NAME_PATTERN (alphanumeric + underscores)
         - column_type MUST be in ALLOWED_COLUMN_TYPES whitelist
@@ -393,7 +393,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
             - error: error type string (if failed)
             - message: error message (if failed)
         """
-        # BUG-022 v9 FIX (CRITICAL-T2): Input validation BEFORE MCP call
+        # Input validation for schema evolution: validation BEFORE MCP call
         # Security: Prevent SQL injection and unauthorized table/column creation
 
         # 1. Validate table_name against whitelist

@@ -127,7 +127,7 @@ AGENT_SKILLS = [
         description="Monitor agent health status and configuration.",
         tags=["debug", "monitoring", "health"],
     ),
-    # BUG-034: Real-time external search tools
+    # Real-time external search tools
     AgentSkill(
         id="search_stackoverflow",
         name="Search Stack Overflow",
@@ -524,7 +524,7 @@ async def health_check() -> Dict[str, Any]:
 
 
 # =============================================================================
-# BUG-034: Real-time External Search Tools
+# Real-time External Search Tools
 # =============================================================================
 
 @tool
@@ -696,8 +696,8 @@ def create_agent() -> Agent:
             store_resolution,
             # Documentation and external search
             search_documentation,
-            search_stackoverflow,  # BUG-034
-            search_github_issues,  # BUG-034
+            search_stackoverflow,  # Real-time external search
+            search_github_issues,  # Real-time external search
             # Monitoring
             health_check,
         ],

@@ -4,7 +4,7 @@
 # This module is the SINGLE SOURCE OF TRUTH for data type conversions in the
 # A2A (Agent-to-Agent) communication protocol.
 #
-# ROOT CAUSE OF BUG-032 to BUG-036 (5 days of bugs):
+# ROOT CAUSE OF DATA CONTRACT ISSUES (5 days of bugs):
 # - A2A Protocol returns `result.response` as STRING JSON, not DICT
 # - Multiple parts of the codebase assumed DICT, causing silent failures
 #
@@ -30,7 +30,7 @@
 # Reference:
 # - ADR-004: Global error capture pattern
 # - ADR-005: Strands Structured Output Compliance (AUDIT-001)
-# - BUG-032 to BUG-036: Data format consistency issues
+# - Historical data format consistency issues
 # =============================================================================
 
 import json
@@ -341,7 +341,7 @@ def fix_double_encoded_json(data: str, max_depth: int = 3) -> Union[str, Dict, A
     Sometimes data gets double-encoded (JSON string within JSON string).
     Example: '"{\\"key\\": \\"value\\"}"' → {"key": "value"}
 
-    This was a contributing factor to BUG-022.
+    Historical note: This contributed to data format issues.
 
     Args:
         data: Potentially double-encoded string

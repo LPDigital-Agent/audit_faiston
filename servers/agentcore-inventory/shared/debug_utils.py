@@ -14,9 +14,9 @@
 #       debug_error(e, operation="json_parse", context={"data_preview": data[:200]})
 #       # Continue with fallback...
 #
-# Architecture (BUG-031):
+# Architecture - Strands lifecycle hooks for debug capture:
 # - DebugHook only captures Strands Agent lifecycle events (AfterToolCallEvent)
-# - Pure Python try/catch blocks were NOT being sent to Debug Agent
+# - Pure Python try/catch blocks need a separate mechanism for Debug Agent
 # - This module provides `debug_error()` to capture ALL errors globally
 #
 # Reference:
@@ -31,7 +31,7 @@ import traceback
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-# BUG-036 FIX: Import ensure_dict for STRING→DICT conversion
+# Import ensure_dict for STRING→DICT conversion
 # A2A protocol returns result.response as STRING JSON, not DICT
 from shared.data_contracts import ensure_dict
 
@@ -160,9 +160,9 @@ async def debug_error_async(
                 f"[debug_error] Enriched: {type(error).__name__} in {operation} "
                 f"(severity={severity})"
             )
-            # BUG-036 FIX: Convert STRING to DICT using data contract
+            # Convert STRING to DICT using data contract
             # A2A protocol returns result.response as STRING JSON, not DICT
-            # This was the ROOT CAUSE of debug_analysis being unusable in frontend
+            # This ensures debug_analysis is usable as a dict in frontend
             analysis_dict = ensure_dict(result.response, "debug_agent_response")
             return {
                 "enriched": True,
@@ -170,7 +170,7 @@ async def debug_error_async(
                 "agent_id": result.agent_id,
             }
         else:
-            # BUG-035: Changed from debug to warning for visibility in production
+            # Log at warning level for visibility in production monitoring
             logger.warning(
                 f"[debug_error] Debug Agent call failed: {result.error}"
             )
@@ -180,7 +180,7 @@ async def debug_error_async(
             }
 
     except asyncio.TimeoutError:
-        # BUG-035: Changed from debug to warning for visibility in production
+        # Log at warning level for visibility in production monitoring
         logger.warning(
             f"[debug_error] Timeout ({timeout}s) sending {type(error).__name__} to Debug Agent"
         )
@@ -188,7 +188,7 @@ async def debug_error_async(
 
     except Exception as e:
         # Catch-all to prevent debug_error from causing additional errors
-        # BUG-035: Changed from debug to warning for visibility in production
+        # Log at warning level for visibility in production monitoring
         logger.warning(f"[debug_error] Failed to send to Debug Agent: {e}")
         return {"enriched": False, "reason": str(e)}
 
@@ -196,7 +196,7 @@ async def debug_error_async(
 # =============================================================================
 # Sync Error Capture Function (Wrapper)
 # =============================================================================
-# BUG-032 FIX: Changed from fire-and-forget to synchronous with timeout.
+# Synchronous wrapper with timeout for Debug Agent invocation.
 # This ensures the Debug Agent's analysis is RETURNED in the response flow,
 # not lost in a background task.
 # =============================================================================
@@ -214,9 +214,9 @@ def debug_error(
     AUDIT-003: This function REPLACES logger.error() across the codebase.
     It ALWAYS logs locally first, then sends to Debug Agent for enrichment.
 
-    BUG-032 FIX: Now waits for Debug Agent response instead of fire-and-forget.
-    The analysis is returned in the response dict so it can be propagated to
-    the frontend via response["debug_analysis"].
+    Waits for Debug Agent response instead of fire-and-forget. The analysis
+    is returned in the response dict so it can be propagated to the frontend
+    via response["debug_analysis"].
 
     This is the PRIMARY function to use in try/catch blocks. It handles
     all async/sync context detection automatically.
@@ -262,8 +262,7 @@ def debug_error(
 
         if loop is not None:
             # Already in async context - we need to await properly
-            # BUG-032 FIX: Use nest_asyncio pattern or run_coroutine_threadsafe
-            # to get the actual result instead of fire-and-forget
+            # Use run_coroutine_threadsafe to get result without blocking event loop
             import concurrent.futures
 
             # Run in thread pool to avoid blocking the event loop
@@ -278,27 +277,26 @@ def debug_error(
                 result = future.result(timeout=timeout + 1.0)
                 return result
             except concurrent.futures.TimeoutError:
-                # BUG-035: Changed from debug to warning for visibility
+                # Log at warning level for visibility in production monitoring
                 logger.warning(
                     f"[debug_error] Timeout ({timeout}s) waiting for Debug Agent analysis"
                 )
                 return {"enriched": False, "reason": "timeout_sync"}
             except Exception as e:
-                # BUG-035: Changed from debug to warning for visibility
+                # Log at warning level for visibility in production monitoring
                 logger.warning(f"[debug_error] Concurrent execution failed: {e}")
                 return {"enriched": False, "reason": str(e)}
 
         else:
             # Sync context - run in new event loop
-            # BUG-035: Updated comment to reflect 15s timeout
-            # This blocks briefly, but timeout ensures max 15s wait
+            # This blocks briefly, but timeout ensures bounded wait time
             return asyncio.run(
                 debug_error_async(error, operation, context, severity, timeout)
             )
 
     except Exception as e:
         # Absolute last resort - never let debug_error fail the main code
-        # BUG-035: Changed from debug to warning for visibility
+        # Log at warning level for visibility in production monitoring
         logger.warning(f"[debug_error] Wrapper failed: {e}")
         return {"enriched": False, "reason": str(e)}
 

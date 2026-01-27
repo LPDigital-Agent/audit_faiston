@@ -20,7 +20,8 @@
 # =============================================================================
 
 # =============================================================================
-# BUG-037 FIX: Namespace collision resolved by renaming tools/ → core_tools/
+# Namespace management for tool imports
+# Namespace collision resolved by renaming tools/ to core_tools/
 # The sys.path workaround is no longer needed.
 # =============================================================================
 

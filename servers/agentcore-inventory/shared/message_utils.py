@@ -1,7 +1,7 @@
 """
 Strands SDK Message Text Extraction Utilities.
 
-BUG-039 FIX: Handles multiple response formats from Strands SDK.
+Strands message extraction utilities: Handles multiple response formats from Strands SDK.
 
 The Strands SDK can return messages in various formats:
 - str: Simple string response

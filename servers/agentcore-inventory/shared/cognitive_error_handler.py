@@ -442,7 +442,7 @@ def cognitive_error_handler(agent_id: str):
                 enriched = await _enrich_with_debug_agent(e, context)
 
                 # ============================================================
-                # RepairAgent Trigger (BUG-044 Implementation)
+                # RepairAgent Trigger Conditions
                 # ============================================================
                 # If DebugAgent suggests repair, attempt automated fix
                 suggested_action = enriched.get("suggested_action", "")

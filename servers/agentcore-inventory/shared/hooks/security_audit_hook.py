@@ -28,7 +28,7 @@ from strands.hooks.events import (
 
 from shared.circuit_breaker import CircuitBreaker
 
-# BUG-037 FIX: Renamed tools/ → core_tools/ to eliminate namespace collision.
+# Lazy import for module initialization
 # SGAAuditLogger is imported lazily in __init__ to stay within AgentCore 30s timeout.
 
 logger = logging.getLogger(__name__)
@@ -89,8 +89,8 @@ class SecurityAuditHook(HookProvider):
             name="security_audit_hook",
         )
 
-        # BUG-037 FIX: Lazy import for AgentCore 30s timeout compliance
-        # Namespace collision fixed by renaming tools/ → core_tools/
+        # Lazy import for module initialization
+        # Namespace collision fixed by renaming tools/ to core_tools/
         try:
             from core_tools.dynamodb_client import SGAAuditLogger
             self.audit_logger = SGAAuditLogger()

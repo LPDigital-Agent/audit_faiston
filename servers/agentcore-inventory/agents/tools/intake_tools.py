@@ -28,7 +28,8 @@ from typing import Optional
 from strands import tool
 
 # =============================================================================
-# BUG-037 FIX: Namespace collision resolved by renaming tools/ → core_tools/
+# Clean tool imports
+# Namespace collision resolved by renaming tools/ to core_tools/
 # The importlib.util workaround is no longer needed. Direct import works now.
 # =============================================================================
 from core_tools.s3_client import SGAS3Client, S3ClientError

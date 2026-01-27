@@ -151,7 +151,7 @@ class DebugHook(HookProvider):
         Called after agent invocation completes. Checks for error conditions
         in the stop_reason or response.
 
-        BUG-022 FIX: Now also intercepts 'soft errors' (success: false) not just
+        Soft error interception: Now also intercepts 'soft errors' (success: false) not just
         exceptions, enabling Debug Agent enrichment for ALL error types.
         """
         # Skip if disabled or circuit is open
@@ -161,7 +161,7 @@ class DebugHook(HookProvider):
         # Try to extract response
         response = getattr(event, "response", None)
 
-        # BUG-022 FIX: Intercept 'soft errors' (success: false) not just exceptions
+        # Soft error interception: Intercept 'soft errors' (success: false) not just exceptions
         if isinstance(response, dict):
             # Check for soft error pattern (success: false)
             if response.get("success") is False:

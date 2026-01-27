@@ -134,8 +134,8 @@ async def create_fix_branch_tool(error_id: str, description: str) -> str:
     fix/BUG-{error_id}-{slug(description)}
 
     Examples:
-        error_id="044", description="missing part number validation"
-        → fix/BUG-044-missing-part-number-validation
+        error_id="123", description="missing part number validation"
+        → fix/issue-123-missing-part-number-validation
 
     Args:
         error_id: Bug/error ID (e.g., "044")
@@ -145,7 +145,7 @@ async def create_fix_branch_tool(error_id: str, description: str) -> str:
         JSON string with result:
         {
             "success": true/false,
-            "branch_name": "fix/BUG-044-...",
+            "branch_name": "fix/issue-123-...",
             "base_sha": "abc123...",
             "error": "error message if failed"
         }
@@ -162,7 +162,7 @@ async def create_fix_branch_tool(error_id: str, description: str) -> str:
     try:
         # Generate safe branch name
         slug = slugify(description, max_length=50)
-        branch_name = f"fix/BUG-{error_id}-{slug}"
+        branch_name = f"fix/issue-{error_id}-{slug}"
 
         # Validate branch safety
         validate_branch_safety(branch_name)
@@ -247,7 +247,7 @@ async def commit_fix_tool(
     4. Returns commit SHA
 
     Args:
-        branch_name: Branch to commit to (e.g., "fix/BUG-044-validation")
+        branch_name: Branch to commit to (e.g., "fix/issue-123-validation")
         file_path: File path to update (e.g., "agents/specialists/intake/main.py")
         new_content: New file content (full file)
         commit_message: Commit message (should follow conventional commits)
@@ -258,7 +258,7 @@ async def commit_fix_tool(
             "success": true/false,
             "commit_sha": "abc123...",
             "syntax_valid": true/false,
-            "branch_name": "fix/BUG-044-...",
+            "branch_name": "fix/issue-123-...",
             "error": "error message if failed"
         }
 
@@ -374,8 +374,8 @@ async def create_pr_tool(
     CRITICAL: ALL PRs are created as DRAFT (never auto-merge).
 
     Args:
-        branch_name: Source branch (e.g., "fix/BUG-044-validation")
-        title: PR title (e.g., "fix(BUG-044): Add part number validation")
+        branch_name: Source branch (e.g., "fix/issue-123-validation")
+        title: PR title (e.g., "fix(issue-123): Add part number validation")
         body: PR body (should include error details, fix explanation, test results)
 
     Returns:
@@ -384,7 +384,7 @@ async def create_pr_tool(
             "success": true/false,
             "pr_url": "https://github.com/org/repo/pull/123",
             "pr_number": 123,
-            "branch_name": "fix/BUG-044-...",
+            "branch_name": "fix/issue-123-...",
             "error": "error message if failed"
         }
 

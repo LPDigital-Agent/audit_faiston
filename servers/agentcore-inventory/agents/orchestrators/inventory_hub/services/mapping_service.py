@@ -141,7 +141,7 @@ def invoke_schema_mapper_phase3(
             return {"success": False, "error": result.error}
 
         response_data = getattr(result, "response", result)
-        # BUG-028 DIAGNOSTIC: Enhanced logging for A2A response
+        # A2A response handling: Enhanced logging for debugging response structure
         logger.info(
             f"[Phase3] Raw A2A result type: {type(result).__name__}, "
             f"has 'response' attr: {hasattr(result, 'response')}, "
@@ -331,7 +331,7 @@ def generate_hil_questions(missing_fields: list[dict[str, Any]]) -> list[dict[st
 
 
 # =============================================================================
-# Backward Compatibility Exports (BUG-045)
+# Backward Compatibility Exports
 # =============================================================================
 # These functions were in main.py before modular refactoring.
 # Re-exported here for test compatibility.
@@ -341,8 +341,8 @@ def _convert_missing_fields_to_questions(missing_fields: list) -> list:
     """
     Convert SchemaMapper's missing_required_fields to NexoQuestion format.
 
-    BUG-022 FIX: SchemaMapper returns `missing_required_fields` when status="needs_input".
-    Each entry contains:
+    Column mappings normalization: SchemaMapper returns `missing_required_fields`
+    when status="needs_input". Each entry contains:
         {
             "target_column": "part_number",
             "description": "Código do material/SKU",
@@ -386,12 +386,12 @@ def _merge_phase3_results(phase2_response: dict, phase3_response: dict) -> dict:
     """
     Merge Phase 3 (SchemaMapper) results into Phase 2 response.
 
-    BUG-022 FIX: This function merges:
+    Column mappings normalization: This function merges:
     - column_mappings: From Phase 3 if available
     - questions: Converted from missing_required_fields if status="needs_input"
     - mapping_confidence: From Phase 3 overall_confidence
 
-    BUG-045 FIX: Prefer AI-generated questions from SchemaMapper directly.
+    Prefer AI-generated questions from SchemaMapper directly.
     SchemaMapper now generates intelligent, context-aware questions using sample_data.
     Only fall back to template-based conversion if SchemaMapper doesn't return questions.
 
@@ -417,7 +417,7 @@ def _merge_phase3_results(phase2_response: dict, phase3_response: dict) -> dict:
     # Extract Phase 3 status
     status = phase3_response.get("status", "unknown")
 
-    # BUG-028 DIAGNOSTIC: Log merge context for debugging
+    # A2A response handling: Log merge context for debugging
     logger.info(
         f"[Phase3] Merging results - status: {status}, "
         f"phase3_response keys: {list(phase3_response.keys())}, "
@@ -427,8 +427,8 @@ def _merge_phase3_results(phase2_response: dict, phase3_response: dict) -> dict:
 
     # Case 1: status="needs_input" - Use questions from SchemaMapper
     if status == "needs_input":
-        # BUG-045 FIX: Prefer AI-generated questions from SchemaMapper directly
-        # SchemaMapper now returns intelligent questions with context from sample_data
+        # Prefer AI-generated questions from SchemaMapper directly
+        # SchemaMapper returns intelligent questions with context from sample_data
         if "questions" in phase3_response and phase3_response["questions"]:
             merged["questions"] = phase3_response["questions"]
             logger.info(
@@ -443,8 +443,8 @@ def _merge_phase3_results(phase2_response: dict, phase3_response: dict) -> dict:
                 logger.info(f"[Phase3] Fallback: Generated {len(questions)} template questions")
 
     # Case 2: status="success" - Use proposed mappings
-    # BUG-023 FIX: Check key existence, not truthiness (empty list is valid state)
-    # GHOST BUG MITIGATION: LLMs may use different key names for mappings
+    # Column mappings normalization: Check key existence, not truthiness (empty list is valid)
+    # LLMs may use different key names for mappings, so we check multiple variants
     elif status == "success":
         # Key-tolerant extraction: Try multiple possible key names
         mappings = (
@@ -455,8 +455,8 @@ def _merge_phase3_results(phase2_response: dict, phase3_response: dict) -> dict:
             or []
         )
 
-        # BUG-028 FIX: ALWAYS set column_mappings, even if empty
-        # Frontend expects this field to exist (empty [] is valid state)
+        # Ensure mappings key always present: Frontend expects this field to exist
+        # Even empty [] is valid state for column_mappings
         merged["column_mappings"] = mappings
 
         if mappings:
@@ -469,7 +469,7 @@ def _merge_phase3_results(phase2_response: dict, phase3_response: dict) -> dict:
                 f"SchemaMapper may need more context or sample data."
             )
 
-        # BUG-045: Even on success, include AI questions for low-confidence mappings
+        # Even on success, include AI questions for low-confidence mappings
         if "questions" in phase3_response and phase3_response["questions"]:
             merged["questions"] = phase3_response["questions"]
             logger.info(

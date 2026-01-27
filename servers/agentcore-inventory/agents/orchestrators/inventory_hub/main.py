@@ -1,13 +1,13 @@
 """
 Inventory Hub Orchestrator - Central intelligence for SGA file ingestion.
 
-BUG-034 FIX: Lazy imports pattern for AgentCore 30-second initialization timeout.
-All heavy imports are deferred to first request, allowing module to load
-fast enough for AgentCore Firecracker runtime.
+Lazy import for AgentCore timeout compliance: All heavy imports are deferred
+to first request, allowing module to load fast enough for AgentCore
+Firecracker runtime (30-second initialization timeout).
 
-BUG-035 FIX: A2A Protocol Migration.
-Changed from BedrockAgentCoreApp (HTTP, port 8080) to A2AServer (A2A, port 9000).
-AgentCore expects A2A servers on port 9000 at root path (/).
+A2A Protocol patterns: Changed from BedrockAgentCoreApp (HTTP, port 8080)
+to A2AServer (A2A, port 9000). AgentCore expects A2A servers on port 9000
+at root path (/).
 
 Architecture:
 - Module-level: Only json, logging, os (fast)
@@ -28,7 +28,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# Lazy Import Cache (BUG-034 FIX + BUG-035 A2A Migration)
+# Lazy Import Cache (AgentCore timeout compliance + A2A Protocol patterns)
 # =============================================================================
 # All heavy imports are cached here on first request.
 # This moves the ~20s import cost from module load to first request.
@@ -51,11 +51,11 @@ def _ensure_lazy_imports() -> None:
     """
     Load all heavy imports on first call, then cache for subsequent calls.
 
-    This is the core of the BUG-034 fix: by deferring imports to the first
-    request, we allow the module to initialize quickly (<5s) so
+    Lazy import for AgentCore timeout compliance: By deferring imports to the
+    first request, we allow the module to initialize quickly (<5s) so
     AgentCore doesn't kill the container before the server can start.
 
-    BUG-035: Also loads A2AServer for the A2A protocol migration.
+    A2A Protocol patterns: Also loads A2AServer for the protocol migration.
     """
     global _lazy_loaded, _Agent, _A2AServer, _AgentSkill
     global _config, _prompts, _services, _tools
@@ -70,7 +70,7 @@ def _ensure_lazy_imports() -> None:
     from strands import Agent as _AgentClass
     _Agent = _AgentClass
 
-    # A2A Server for AgentCore A2A protocol (BUG-035)
+    # A2A Protocol patterns: Server for AgentCore A2A protocol
     from strands.multiagent.a2a import A2AServer as _A2AServerClass
     from a2a.types import AgentSkill as _AgentSkillClass
     _A2AServer = _A2AServerClass
@@ -195,7 +195,7 @@ def invoke(payload: dict, context=None) -> dict:
     """
     Legacy handler for direct invocation (backward compatibility).
 
-    NOTE: With BUG-035 A2A migration, this function is NO LONGER the entrypoint.
+    NOTE: With A2A migration, this function is NO LONGER the entrypoint.
     The A2AServer routes JSON-RPC messages directly to the Strands Agent.
     This function is kept for:
     - Backward compatibility with tests
@@ -217,7 +217,7 @@ def invoke(payload: dict, context=None) -> dict:
     Returns:
         Response dict with operation results.
     """
-    # Load lazy imports on first call (BUG-034 fix)
+    # Load lazy imports on first call (AgentCore timeout compliance)
     _ensure_lazy_imports()
 
     try:
@@ -501,7 +501,7 @@ __all__ = [
 
 
 # =============================================================================
-# A2A SERVER FACTORY (BUG-035 FIX)
+# A2A SERVER FACTORY (A2A Protocol patterns)
 # =============================================================================
 # Creates FastAPI app with A2AServer mounted for AgentCore A2A protocol.
 # Port 9000, serve_at_root=True per AgentCore A2A requirements.
@@ -512,8 +512,8 @@ def create_app():
     """
     Factory function to create FastAPI app with A2AServer.
 
-    BUG-035 FIX: Migrates from BedrockAgentCoreApp (HTTP, port 8080) to
-    A2AServer (A2A protocol, port 9000).
+    A2A Protocol patterns: Migrates from BedrockAgentCoreApp (HTTP, port 8080)
+    to A2AServer (A2A protocol, port 9000).
 
     This function:
     1. Loads lazy imports (first call triggers heavy imports)
@@ -573,7 +573,7 @@ def _start_server():
     """
     Start the A2A server with uvicorn.
 
-    BUG-035 FIX: Uses uvicorn on port 9000 for A2A protocol.
+    A2A Protocol patterns: Uses uvicorn on port 9000 for A2A protocol.
 
     This function is called:
     - When module is run directly: `python -m agents.orchestrators.inventory_hub.main`
@@ -592,7 +592,7 @@ def _start_server():
 
 
 # =============================================================================
-# MODULE-LEVEL EXECUTION (BUG-035 FIX)
+# MODULE-LEVEL EXECUTION (A2A Protocol patterns)
 # =============================================================================
 # A2A servers must start uvicorn on port 9000. The server is started when:
 # 1. Module is run directly: __name__ == "__main__"
@@ -608,6 +608,6 @@ def _start_server():
 if __name__ == "__main__":
     # Local development: python -m agents.orchestrators.inventory_hub.main
     _start_server()
-# REMOVED (BUG-036): AWS_EXECUTION_ENV check was redundant.
+# Response format standardization: AWS_EXECUTION_ENV check was redundant.
 # AgentCore A2A pattern uses `if __name__ == "__main__"` only.
 # Ref: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md

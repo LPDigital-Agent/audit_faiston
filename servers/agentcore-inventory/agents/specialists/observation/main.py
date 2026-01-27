@@ -88,7 +88,7 @@ Phase 5 of the Smart Import architecture.
 # Port for local A2A server (see LOCAL_AGENTS in a2a_client.py:1455)
 AGENT_PORT = 9012
 
-# Runtime ID for AgentCore deployment (updated Jan 23, 2026 - BUG-023 fix)
+# Runtime ID for AgentCore deployment (January 2026 update)
 RUNTIME_ID = "faiston_sga_observation-tgaIiC6AtX"
 
 

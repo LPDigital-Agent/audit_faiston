@@ -1,5 +1,5 @@
 # =============================================================================
-# DebugAgent Tool: search_github_issues (BUG-034)
+# DebugAgent Tool: search_github_issues - Real-time External Search
 # =============================================================================
 # Real-time GitHub Issues API integration for error debugging.
 #
@@ -16,8 +16,8 @@
 # - 10 requests per minute
 # - 60 requests per hour
 #
-# BUG-034: This tool enables the Debug Agent to find known issues and
-# workarounds from the open source community, especially for Strands Agents.
+# This tool enables the Debug Agent to find known issues and workarounds
+# from the open source community, especially for Strands Agents.
 # =============================================================================
 
 import json
@@ -99,7 +99,7 @@ async def search_github_issues_tool(
         httpx.HTTPStatusError: If GitHub API returns error status (caught internally).
     """
     logger.info(
-        "[search_github_issues] BUG-034: Searching GitHub for: %s",
+        "[search_github_issues] Searching GitHub for: %s",
         query[:80]
     )
 
