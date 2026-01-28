@@ -97,11 +97,16 @@ def map_to_schema(
             })
 
         result = asyncio.run(_invoke_mapper())
-        response_data = getattr(result, "response", result)
-        if isinstance(response_data, dict):
-            return json.dumps(response_data)
+        response_str = getattr(result, "response", "")
 
-        return json.dumps({"success": True, "response": str(response_data)})
+        # BUG-046 FIX: A2AResponse.response is a JSON STRING, not a dict.
+        # Parse it so we return the actual response structure, not a wrapper.
+        try:
+            final_result = json.loads(response_str) if response_str else {}
+        except json.JSONDecodeError:
+            final_result = {"success": False, "error": "Invalid JSON from schema_mapper", "raw": response_str[:500]}
+
+        return json.dumps(final_result)
 
     except Exception as e:
         debug_error(e, "map_to_schema", {"columns": columns})

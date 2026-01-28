@@ -26,7 +26,8 @@ from typing import Any, Dict
 from datetime import datetime, date
 
 # Version for tracking deployments (BUG-043 fix)
-__version__ = "2026.01.27.v1"
+# v3-redeploy: Force GitHub Actions to detect change after race condition in PR #198
+__version__ = "2026.01.27.v3-redeploy"
 
 # Configure logging
 log_level = os.environ.get("LOG_LEVEL", "INFO")

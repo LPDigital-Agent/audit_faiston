@@ -150,14 +150,16 @@ class ResultValidationHook(HookProvider):
 
             # Trigger self-correction if retries available
             if self.max_retries > 0:
-                logger.info(
-                    f"[ResultValidationHook] Triggering self-correction "
-                    f"(max {self.max_retries} retries)"
+                # NOTE: Self-correction via agent re-invocation is NOT supported
+                # in Strands SDK. AfterInvocationEvent callbacks run while the
+                # agent lock is held, causing ConcurrencyException.
+                # Ref: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/agents/hooks/
+                logger.warning(
+                    f"[ResultValidationHook] Validation failed. Skipping "
+                    f"self-correction to avoid ConcurrencyException "
+                    f"(Strands SDK Limitation). Failures: {failure_details}"
                 )
-
-                # Re-invoke agent with correction feedback
-                # _trigger_self_correction handles the full retry loop
-                await self._trigger_self_correction(event, failures)
+                # Do NOT call _trigger_self_correction() - it causes ConcurrencyException
             else:
                 # Max retries exhausted
                 logger.error(

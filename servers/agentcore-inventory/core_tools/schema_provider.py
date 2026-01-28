@@ -228,7 +228,13 @@ class SchemaProvider:
         Uses synchronous MCPGatewayClient with SigV4 signing.
 
         Returns:
-            Schema metadata dictionary
+            Schema metadata dictionary (or safe empty schema on error)
+
+        Note:
+            BUG-043 resilience: Returns empty schema instead of crashing
+            when MCP Gateway returns an error. This allows the agent to
+            continue processing (with degraded functionality) instead of
+            entering a zombie state that causes ConcurrencyException.
         """
         try:
             mcp_client = self._get_mcp_client()
@@ -241,20 +247,53 @@ class SchemaProvider:
             )
 
             if not result:
-                raise ValueError("Empty response from MCP Gateway")
+                logger.error("[SchemaProvider] Empty response from MCP Gateway")
+                return self._get_safe_empty_schema("Empty response from MCP Gateway")
 
             # Result is already parsed by mcp_gateway_client.call_tool()
             if isinstance(result, dict):
                 if "error" in result:
-                    raise ValueError(f"MCP tool error: {result['error']}")
+                    # BUG-043: Log error but return safe schema instead of crashing
+                    error_msg = result.get("error", "Unknown error")
+                    logger.error(f"[SchemaProvider] MCP Gateway error: {error_msg}")
+                    return self._get_safe_empty_schema(f"MCP Gateway error: {error_msg}")
                 if "tables" in result:
                     return result
 
-            raise ValueError(f"Unexpected MCP response format: {type(result)}")
+            # Unexpected format - log and return safe schema
+            logger.error(f"[SchemaProvider] Unexpected MCP response format: {type(result)}")
+            return self._get_safe_empty_schema(f"Unexpected response format: {type(result)}")
 
         except Exception as e:
+            # BUG-043: Catch all exceptions and return safe schema
             debug_error(e, "schema_provider_mcp_refresh", {})
-            raise
+            logger.error(f"[SchemaProvider] Exception during MCP refresh: {type(e).__name__}: {e}")
+            return self._get_safe_empty_schema(f"Exception: {type(e).__name__}: {e}")
+
+    def _get_safe_empty_schema(self, error_reason: str) -> Dict[str, Any]:
+        """
+        Return a safe empty schema structure for graceful degradation.
+
+        When MCP Gateway fails, the agent should continue processing
+        instead of crashing. An empty schema means no mappings can be
+        suggested, but the agent won't enter a zombie state.
+
+        Args:
+            error_reason: Human-readable error description
+
+        Returns:
+            Safe empty schema dictionary
+        """
+        logger.warning(f"[SchemaProvider] Returning empty schema due to: {error_reason}")
+        return {
+            "tables": {},
+            "enums": {},
+            "foreign_keys": {},
+            "required_columns": {},
+            "table_list": [],
+            "error": error_reason,
+            "timestamp": None,
+        }
 
     def _ensure_cache(self) -> None:
         """Ensure cache is populated and valid."""

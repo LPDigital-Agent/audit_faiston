@@ -27,10 +27,33 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 import boto3
 
-from shared.debug_utils import debug_error
-
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Version for tracking deployments (BUG-043 fix)
+__version__ = "2026.01.27.v1"
+
+
+def debug_error(exception: Exception, operation: str, context: dict = None) -> dict:
+    """
+    Local error logging for Lambda context.
+
+    Note: Lambda does not use shared.debug_utils to avoid dependency bloat.
+    Unlike AgentCore agents, Lambda cannot call Debug Agent via A2A.
+    Errors are logged directly to CloudWatch.
+
+    Args:
+        exception: The exception that occurred
+        operation: Name of the operation that failed
+        context: Additional context for debugging
+
+    Returns:
+        Dict with enriched=False (no A2A enrichment in Lambda context)
+    """
+    logger.error(f"[{operation}] {type(exception).__name__}: {exception}")
+    if context:
+        logger.error(f"[{operation}] Context: {context}")
+    return {"enriched": False, "analysis": {}}
 
 
 class SGAPostgresClient:

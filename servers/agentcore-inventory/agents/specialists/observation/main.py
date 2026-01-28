@@ -285,7 +285,7 @@ def create_agent() -> Agent:
         Strands Agent configured for proactive insights.
     """
     hooks = [
-        LoggingHook(log_level=logging.INFO),
+        LoggingHook(log_level=logging.DEBUG, include_payloads=True),
         MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
         DebugHook(timeout_seconds=30.0),
         SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail

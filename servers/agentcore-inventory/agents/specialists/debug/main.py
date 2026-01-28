@@ -703,7 +703,7 @@ def create_agent() -> Agent:
         ],
         system_prompt=SYSTEM_PROMPT,
         hooks=[
-            LoggingHook(),
+            LoggingHook(log_level=logging.DEBUG, include_payloads=True),
             MetricsHook(),
             DebugHook(timeout_seconds=30.0),
             SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail

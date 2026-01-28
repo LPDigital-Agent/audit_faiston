@@ -160,7 +160,7 @@ def create_inventory_hub(
     _ensure_lazy_imports()
 
     hooks = [
-        _hooks["LoggingHook"](log_level=logging.INFO),
+        _hooks["LoggingHook"](log_level=logging.DEBUG, include_payloads=True),
         _hooks["MetricsHook"](namespace="FaistonSGA", emit_to_cloudwatch=True),
         _hooks["DebugHook"](timeout_seconds=30.0),
         _hooks["SecurityAuditHook"](enabled=True),  # FAIL-CLOSED audit trail

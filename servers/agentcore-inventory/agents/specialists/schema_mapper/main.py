@@ -755,7 +755,7 @@ def create_agent():
     tools = _create_tools()
 
     hooks = [
-        _LoggingHook(log_level=logging.INFO),
+        _LoggingHook(log_level=logging.DEBUG, include_payloads=True),
         _MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
         _DebugHook(timeout_seconds=30.0),
         _SecurityAuditHook(enabled=True),  # FAIL-CLOSED audit trail
