@@ -1,0 +1,35 @@
+1:"$Sreact.fragment"
+2:I[11240,["/_next/static/chunks/48e6ed7100466f58.js","/_next/static/chunks/85c15d4ad91798cb.js","/_next/static/chunks/15ea422a2468cbb3.js","/_next/static/chunks/eafdcb305021107b.js","/_next/static/chunks/5acf7ddb088f7b4b.js","/_next/static/chunks/4413015d1dbd7b43.js","/_next/static/chunks/b44bce847cc4674f.js","/_next/static/chunks/cc452a76f1eec824.js","/_next/static/chunks/0d09c778802a7428.js"],"BlogArticleContent"]
+4:I[91802,["/_next/static/chunks/01753452ac5baafa.js","/_next/static/chunks/1ad442154a76f99f.js"],"OutletBoundary"]
+5:"$Sreact.suspense"
+3:T46a,
+# TI na Saude: Como a Tecnologia Esta Mudando o Futuro
+
+O setor de saude passa por uma transformacao digital sem precedentes. A tecnologia esta redefinindo como cuidamos da saude, desde o diagnostico ate o tratamento.
+
+## Principais Inovacoes
+
+### Telemedicina
+A pandemia acelerou a adocao da telemedicina, que hoje e parte essencial do atendimento medico. Consultas remotas aumentaram 3.000% desde 2020.
+
+### IA no Diagnostico
+Algoritmos de machine learning conseguem detectar doencas em exames de imagem com precisao superior a especialistas humanos em alguns casos.
+
+### Prontuario Eletronico
+A digitalizacao de registros medicos melhora a continuidade do cuidado e reduz erros.
+
+### IoT Medico
+Dispositivos conectados monitoram pacientes em tempo real, permitindo intervencoes proativas.
+
+## Desafios e Oportunidades
+
+### Seguranca de Dados
+Dados de saude sao extremamente sensiveis e exigem protecao robusta (LGPD, HIPAA).
+
+### Interoperabilidade
+Sistemas precisam se comunicar para entregar valor real aos pacientes.
+
+### Capacitacao
+Profissionais de saude precisam de treinamento para aproveitar as novas tecnologias.
+    0:{"buildId":"nUZ9vApZZCjsgjoVL1pk0","rsc":["$","$1","c",{"children":[["$","$L2",null,{"post":{"id":"4","slug":"ti-saude-tecnologia-futuro","title":"TI na Saude: Como a Tecnologia Esta Mudando o Futuro","excerpt":"Explore as inovacoes tecnologicas que estao transformando o setor de saude, desde telemedicina ate inteligencia artificial no diagnostico.","content":"$3","category":"infraestrutura","categoryLabel":"Infraestrutura","publishedAt":"2025-07-10","readTime":6,"featured":false,"externalUrl":"https://faiston.com/blogs/ti-saude-tecnologia-futuro","tags":["saude","telemedicina","inovacao","IA"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/0d09c778802a7428.js","async":true}]],["$","$L4",null,{"children":["$","$5",null,{"name":"Next.MetadataOutlet","children":"$@6"}]}]]}],"loading":null,"isPartial":false}
+6:null

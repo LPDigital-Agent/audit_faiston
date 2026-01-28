@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,19712,e=>{"use strict";var t=e.i(18939),r=e.i(93149);function u(){let e=(0,r.useRouter)();return(0,t.useEffect)(()=>{e.replace("/ferramentas/academy/dashboard")},[e]),null}e.s(["default",()=>u])}]);

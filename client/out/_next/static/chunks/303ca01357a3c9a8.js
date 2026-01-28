@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,43538,e=>{"use strict";var t=e.i(18939),u=e.i(93149);function c(){let e=(0,u.useRouter)();return(0,t.useEffect)(()=>{e.replace("/nexo/chat")},[e]),null}e.s(["default",()=>c])}]);
